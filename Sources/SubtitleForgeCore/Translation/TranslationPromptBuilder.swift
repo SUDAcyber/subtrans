@@ -13,6 +13,12 @@ public enum TranslationPromptBuilder {
         """
         \(settings.promptTemplate)
 
+        Protected names and translation memory:
+        Treat every item below as a fixed mapping.
+        If a source cue contains the left side, use exactly the right side in the translation.
+        Never translate the literal meaning of romanized personal names or nicknames.
+        \(memoryPrompt(settings.translationMemory))
+
         Output rules:
         Return JSON only.
         The JSON schema is {"translations":[{"id":1,"text":"translated subtitle"}]}.
@@ -47,6 +53,24 @@ public enum TranslationPromptBuilder {
 
         \(json)
         """
+    }
+}
+
+private extension TranslationPromptBuilder {
+    static func memoryPrompt(_ entries: [TranslationMemoryEntry]) -> String {
+        let usableEntries = entries.filter(\.isUsable)
+        guard !usableEntries.isEmpty else {
+            return "No project memory entries."
+        }
+
+        return usableEntries
+            .map { entry in
+                let source = entry.source.trimmingCharacters(in: .whitespacesAndNewlines)
+                let target = entry.target.trimmingCharacters(in: .whitespacesAndNewlines)
+                let note = entry.note.trimmingCharacters(in: .whitespacesAndNewlines)
+                return note.isEmpty ? "- \(source) => \(target)" : "- \(source) => \(target) (\(note))"
+            }
+            .joined(separator: "\n")
     }
 }
 

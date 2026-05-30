@@ -3,6 +3,9 @@ import SubtitleForgeCore
 
 struct InspectorView: View {
     @Bindable var store: AppStore
+    @State private var memorySource = ""
+    @State private var memoryTarget = ""
+    @State private var memoryNote = "专名"
     private let targetLanguages = ["简体中文", "繁体中文", "英文", "日文", "韩文", "西班牙文", "法文", "德文", "葡萄牙文", "俄文"]
 
     var body: some View {
@@ -12,6 +15,8 @@ struct InspectorView: View {
                 providerSection
                 modelSection
                 chunkSection
+                replaceSection
+                memorySection
                 promptSection
                 validationSection
             }
@@ -110,6 +115,77 @@ struct InspectorView: View {
         }
     }
 
+    private var replaceSection: some View {
+        SettingsGroup(title: "译文查找替换") {
+            SettingsField(title: "查找译文") {
+                TextField("例如 二哥", text: $store.replacementSearchText)
+            }
+
+            SettingsField(title: "替换为") {
+                TextField("例如 Ko Song", text: $store.replacementText)
+            }
+
+            HStack {
+                Toggle("区分大小写", isOn: $store.replacementMatchCase)
+                Spacer()
+                Text("\(store.replacementMatchCount) 处")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(store.replacementMatchCount > 0 ? AppTheme.brass : AppTheme.mutedIvory)
+            }
+
+            HStack {
+                Button("替换一个") {
+                    store.replaceOneTranslationMatch()
+                }
+                .disabled(store.selectedDocument == nil || store.replacementSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Button("全部替换") {
+                    store.replaceAllTranslationMatches()
+                }
+                .disabled(store.selectedDocument == nil || store.replacementMatchCount == 0)
+            }
+        }
+    }
+
+    private var memorySection: some View {
+        SettingsGroup(title: "后台记忆库") {
+            SettingsField(title: "原文或名字") {
+                TextField("例如 Ko Song 或 เซิร์ฟ", text: $memorySource)
+            }
+
+            SettingsField(title: "固定译法") {
+                TextField("例如 Ko Song 或 Surf", text: $memoryTarget)
+            }
+
+            SettingsField(title: "备注") {
+                TextField("例如 泰语人名", text: $memoryNote)
+            }
+
+            HStack {
+                Button("加入记忆") {
+                    store.addMemoryEntry(source: memorySource, target: memoryTarget, note: memoryNote)
+                    memorySource = ""
+                    memoryTarget = ""
+                }
+
+                Button("恢复预置") {
+                    store.restoreDefaultMemoryEntries()
+                }
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(store.settings.translationMemory) { entry in
+                        MemoryEntryRow(entry: entry) {
+                            store.removeMemoryEntry(id: entry.id)
+                        }
+                    }
+                }
+            }
+            .frame(maxHeight: 220)
+        }
+    }
+
     private var promptSection: some View {
         SettingsGroup(title: "翻译指令") {
             TextEditor(text: $store.settings.promptTemplate)
@@ -138,6 +214,50 @@ struct InspectorView: View {
             }
             .disabled(store.selectedDocument == nil || store.isTranslating)
         }
+    }
+}
+
+private struct MemoryEntryRow: View {
+    let entry: TranslationMemoryEntry
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.source)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.ivory)
+                    .lineLimit(1)
+                Text(entry.target)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.brass)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if !entry.note.isEmpty {
+                Text(entry.note)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.mutedIvory)
+                    .lineLimit(1)
+            }
+
+            Button {
+                onRemove()
+            } label: {
+                Image(systemName: "minus.circle")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(AppTheme.mutedIvory)
+            .help("移除")
+        }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(AppTheme.graphite)
+        )
     }
 }
 

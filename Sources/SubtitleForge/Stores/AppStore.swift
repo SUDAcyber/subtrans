@@ -27,6 +27,9 @@ final class AppStore {
     var validation = ValidationReport()
     var errorMessage: String?
     var isInspectorPresented = true
+    var replacementSearchText = ""
+    var replacementText = ""
+    var replacementMatchCase = false
     var previewCueLimit = UserPreferencesStore.loadPreviewCueLimit() {
         didSet {
             UserPreferencesStore.savePreviewCueLimit(previewCueLimit)
@@ -50,6 +53,17 @@ final class AppStore {
 
     var canTranslate: Bool {
         selectedDocument != nil && !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isTranslating
+    }
+
+    var replacementMatchCount: Int {
+        guard let document = selectedDocument else { return 0 }
+        let needle = replacementSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return 0 }
+
+        return document.cues.reduce(0) { total, cue in
+            guard let translation = cue.translation else { return total }
+            return total + translation.matchCount(of: needle, matchCase: replacementMatchCase)
+        }
     }
 
     var isTranslating: Bool {
@@ -191,6 +205,101 @@ final class AppStore {
         }
         validation = ValidationReport.make(cues: documents[index].cues)
         progress = TranslationProgress(phase: .idle, message: "译文已清空")
+    }
+
+    func replaceOneTranslationMatch() {
+        guard let documentIndex = selectedDocumentIndex else {
+            errorMessage = "请先导入字幕文件"
+            return
+        }
+        let needle = replacementSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else {
+            errorMessage = "请先输入要查找的译文"
+            return
+        }
+
+        for cueIndex in documents[documentIndex].cues.indices {
+            guard let translation = documents[documentIndex].cues[cueIndex].translation,
+                  let updated = translation.replacingFirstOccurrence(
+                    of: needle,
+                    with: replacementText,
+                    matchCase: replacementMatchCase
+                  )
+            else {
+                continue
+            }
+
+            documents[documentIndex].cues[cueIndex].translation = updated
+            refreshValidation(for: documents[documentIndex].id)
+            progress = TranslationProgress(phase: .idle, message: "已替换 1 处")
+            return
+        }
+
+        errorMessage = "没有找到匹配译文"
+    }
+
+    func replaceAllTranslationMatches() {
+        guard let documentIndex = selectedDocumentIndex else {
+            errorMessage = "请先导入字幕文件"
+            return
+        }
+        let needle = replacementSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else {
+            errorMessage = "请先输入要查找的译文"
+            return
+        }
+
+        var replacements = 0
+        for cueIndex in documents[documentIndex].cues.indices {
+            guard let translation = documents[documentIndex].cues[cueIndex].translation else {
+                continue
+            }
+            let count = translation.matchCount(of: needle, matchCase: replacementMatchCase)
+            guard count > 0 else { continue }
+            documents[documentIndex].cues[cueIndex].translation = translation.replacingAllOccurrences(
+                of: needle,
+                with: replacementText,
+                matchCase: replacementMatchCase
+            )
+            replacements += count
+        }
+
+        refreshValidation(for: documents[documentIndex].id)
+        progress = TranslationProgress(phase: .idle, message: replacements > 0 ? "已替换 \(replacements) 处" : "没有找到匹配译文")
+    }
+
+    func addMemoryEntry(source: String, target: String, note: String = "") {
+        let trimmedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTarget = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSource.isEmpty, !trimmedTarget.isEmpty else {
+            errorMessage = "记忆库需要同时填写原文和固定译法"
+            return
+        }
+
+        if let index = settings.translationMemory.firstIndex(where: { $0.source.caseInsensitiveCompare(trimmedSource) == .orderedSame }) {
+            settings.translationMemory[index].target = trimmedTarget
+            settings.translationMemory[index].note = note
+        } else {
+            settings.translationMemory.append(
+                TranslationMemoryEntry(source: trimmedSource, target: trimmedTarget, note: note)
+            )
+        }
+    }
+
+    func removeMemoryEntry(id: TranslationMemoryEntry.ID) {
+        settings.translationMemory.removeAll { $0.id == id }
+    }
+
+    func restoreDefaultMemoryEntries() {
+        var merged = settings.translationMemory
+        for defaultEntry in TranslationSettings.defaultTranslationMemory {
+            if let index = merged.firstIndex(where: { $0.source.caseInsensitiveCompare(defaultEntry.source) == .orderedSame }) {
+                merged[index] = defaultEntry
+            } else {
+                merged.append(defaultEntry)
+            }
+        }
+        settings.translationMemory = merged
     }
 
     func exportSelectedWithPanel() {
@@ -342,5 +451,35 @@ final class AppStore {
             return url
         }
         return URL(fileURLWithPath: trimmed)
+    }
+}
+
+private extension String {
+    func matchCount(of needle: String, matchCase: Bool) -> Int {
+        guard !needle.isEmpty else { return 0 }
+        var count = 0
+        var searchStart = startIndex
+        let options: String.CompareOptions = matchCase ? [] : [.caseInsensitive]
+
+        while searchStart < endIndex,
+              let range = range(of: needle, options: options, range: searchStart..<endIndex) {
+            count += 1
+            searchStart = range.upperBound
+        }
+
+        return count
+    }
+
+    func replacingFirstOccurrence(of needle: String, with replacement: String, matchCase: Bool) -> String? {
+        let options: String.CompareOptions = matchCase ? [] : [.caseInsensitive]
+        guard let range = range(of: needle, options: options) else { return nil }
+        var copy = self
+        copy.replaceSubrange(range, with: replacement)
+        return copy
+    }
+
+    func replacingAllOccurrences(of needle: String, with replacement: String, matchCase: Bool) -> String {
+        let options: String.CompareOptions = matchCase ? [] : [.caseInsensitive]
+        return replacingOccurrences(of: needle, with: replacement, options: options)
     }
 }

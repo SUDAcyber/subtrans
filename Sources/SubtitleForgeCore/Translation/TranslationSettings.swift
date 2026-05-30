@@ -57,6 +57,30 @@ public enum TextVerbosity: String, CaseIterable, Codable, Identifiable, Sendable
     }
 }
 
+public struct TranslationMemoryEntry: Codable, Equatable, Hashable, Identifiable, Sendable {
+    public var id: UUID
+    public var source: String
+    public var target: String
+    public var note: String
+
+    public init(
+        id: UUID = UUID(),
+        source: String,
+        target: String,
+        note: String = ""
+    ) {
+        self.id = id
+        self.source = source
+        self.target = target
+        self.note = note
+    }
+
+    public var isUsable: Bool {
+        !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !target.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 public struct TranslationSettings: Codable, Equatable, Sendable {
     public var providerName: String
     public var baseURL: String
@@ -72,6 +96,7 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
     public var requestTimeoutSeconds: Double
     public var stripTargetPunctuation: Bool
     public var promptTemplate: String
+    public var translationMemory: [TranslationMemoryEntry]
 
     public init(
         providerName: String = "AIHubMix",
@@ -87,7 +112,8 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         retryLimit: Int = 2,
         requestTimeoutSeconds: Double = 120,
         stripTargetPunctuation: Bool = true,
-        promptTemplate: String = TranslationSettings.defaultPrompt
+        promptTemplate: String = TranslationSettings.defaultPrompt,
+        translationMemory: [TranslationMemoryEntry] = TranslationSettings.defaultTranslationMemory
     ) {
         self.providerName = providerName
         self.baseURL = baseURL
@@ -103,11 +129,67 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         self.requestTimeoutSeconds = requestTimeoutSeconds
         self.stripTargetPunctuation = stripTargetPunctuation
         self.promptTemplate = promptTemplate
+        self.translationMemory = translationMemory
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case providerName
+        case baseURL
+        case model
+        case endpoint
+        case targetLanguage
+        case reasoningEffort
+        case textVerbosity
+        case chunkCueLimit
+        case maxSourceCharacters
+        case contextOverlap
+        case retryLimit
+        case requestTimeoutSeconds
+        case stripTargetPunctuation
+        case promptTemplate
+        case translationMemory
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.providerName = try container.decodeIfPresent(String.self, forKey: .providerName) ?? "AIHubMix"
+        self.baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL) ?? "https://aihubmix.com/v1"
+        self.model = try container.decodeIfPresent(String.self, forKey: .model) ?? "gpt-5.5"
+        self.endpoint = try container.decodeIfPresent(TranslationEndpoint.self, forKey: .endpoint) ?? .chatCompletions
+        self.targetLanguage = try container.decodeIfPresent(String.self, forKey: .targetLanguage) ?? "简体中文"
+        self.reasoningEffort = try container.decodeIfPresent(ReasoningEffort.self, forKey: .reasoningEffort) ?? .medium
+        self.textVerbosity = try container.decodeIfPresent(TextVerbosity.self, forKey: .textVerbosity) ?? .low
+        self.chunkCueLimit = try container.decodeIfPresent(Int.self, forKey: .chunkCueLimit) ?? 60
+        self.maxSourceCharacters = try container.decodeIfPresent(Int.self, forKey: .maxSourceCharacters) ?? 6_000
+        self.contextOverlap = try container.decodeIfPresent(Int.self, forKey: .contextOverlap) ?? 6
+        self.retryLimit = try container.decodeIfPresent(Int.self, forKey: .retryLimit) ?? 2
+        self.requestTimeoutSeconds = try container.decodeIfPresent(Double.self, forKey: .requestTimeoutSeconds) ?? 120
+        self.stripTargetPunctuation = try container.decodeIfPresent(Bool.self, forKey: .stripTargetPunctuation) ?? true
+        self.promptTemplate = try container.decodeIfPresent(String.self, forKey: .promptTemplate) ?? TranslationSettings.defaultPrompt
+        self.translationMemory = try container.decodeIfPresent([TranslationMemoryEntry].self, forKey: .translationMemory)
+            ?? TranslationSettings.defaultTranslationMemory
     }
 
     public static var aiHubMixDefault: TranslationSettings {
         TranslationSettings()
     }
+
+    public static let defaultTranslationMemory: [TranslationMemoryEntry] = [
+        TranslationMemoryEntry(source: "Ko Song", target: "Ko Song", note: "人名 保留英文"),
+        TranslationMemoryEntry(source: "เซิร์ฟ", target: "Surf", note: "泰语人名"),
+        TranslationMemoryEntry(source: "จาว่า", target: "Java", note: "泰语人名"),
+        TranslationMemoryEntry(source: "จิมมี่", target: "Jimmy", note: "泰语人名"),
+        TranslationMemoryEntry(source: "ซี", target: "Sea", note: "泰语人名"),
+        TranslationMemoryEntry(source: "วิลเลี่ยม", target: "William", note: "泰语人名"),
+        TranslationMemoryEntry(source: "เอส", target: "Est", note: "泰语人名"),
+        TranslationMemoryEntry(source: "สกาย", target: "Sky", note: "泰语人名"),
+        TranslationMemoryEntry(source: "นานิ", target: "Nani", note: "泰语人名"),
+        TranslationMemoryEntry(source: "ดิว", target: "Dew", note: "泰语人名"),
+        TranslationMemoryEntry(source: "ธี", target: "Tee", note: "泰语人名"),
+        TranslationMemoryEntry(source: "เคียน", target: "Kian", note: "泰语人名"),
+        TranslationMemoryEntry(source: "โรม", target: "Rome", note: "泰语人名"),
+        TranslationMemoryEntry(source: "ฟอส", target: "Force", note: "泰语人名")
+    ]
 
     public static let defaultPrompt = """
     # Role
@@ -122,7 +204,7 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
     3 如果目标语言是中文 译文中严禁出现标点符号 句内停顿使用一个空格代替 句末不需要任何符号或空格
     4 译文要口语化 简洁 自然 避免翻译腔
     5 必须结合上下文 不要逐字直译
-    6 人名地名优先使用常见英文通译或官方英文名 如果目标语言有非常通用的标准译名可使用该译名 如果不确定请保留英文原文
+    6 人名地名优先使用常见英文通译或官方英文名 罗马字母人名和昵称默认视为专名 不要按字面意思翻译 例如 Ko Song 必须保留为 Ko Song 不能翻译成二哥 如果目标语言有非常通用的标准译名可使用该译名 如果不确定请保留英文原文
     7 省略无意义的 uh um ah 等语气词 除非它们对剧情表达至关重要
     """
 }
