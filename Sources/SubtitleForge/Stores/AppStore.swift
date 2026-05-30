@@ -114,6 +114,43 @@ final class AppStore {
         progress = TranslationProgress(phase: .idle, message: "已导入 \(cues.count) 条")
     }
 
+    func importDroppedProviders(_ providers: [NSItemProvider]) -> Bool {
+        let fileProviders = providers.filter {
+            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+        }
+        guard !fileProviders.isEmpty else { return false }
+
+        for provider in fileProviders {
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { [weak self] item, error in
+                let droppedURL = Self.fileURL(from: item)
+                let droppedErrorMessage = error?.localizedDescription
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let droppedErrorMessage {
+                        self.errorMessage = droppedErrorMessage
+                        return
+                    }
+                    guard let url = droppedURL else {
+                        self.errorMessage = "无法读取拖入的文件"
+                        return
+                    }
+                    guard url.pathExtension.lowercased() == "srt" else {
+                        self.errorMessage = "目前只支持拖入 SRT 字幕文件"
+                        return
+                    }
+
+                    do {
+                        try self.importFile(url: url)
+                    } catch {
+                        self.errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
+
+        return true
+    }
+
     func translateSelected() {
         guard !isTranslating else { return }
         guard let document = selectedDocument else {
@@ -279,5 +316,31 @@ final class AppStore {
     private func refreshValidation(for documentID: UUID) {
         guard let document = documents.first(where: { $0.id == documentID }) else { return }
         validation = ValidationReport.make(cues: document.cues)
+    }
+
+    private nonisolated static func fileURL(from item: NSSecureCoding?) -> URL? {
+        if let url = item as? URL {
+            return url
+        }
+        if let data = item as? Data {
+            if let url = URL(dataRepresentation: data, relativeTo: nil) {
+                return url
+            }
+            if let string = String(data: data, encoding: .utf8) {
+                return fileURL(from: string)
+            }
+        }
+        if let string = item as? String {
+            return fileURL(from: string)
+        }
+        return nil
+    }
+
+    private nonisolated static func fileURL(from string: String) -> URL? {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = URL(string: trimmed), url.isFileURL {
+            return url
+        }
+        return URL(fileURLWithPath: trimmed)
     }
 }

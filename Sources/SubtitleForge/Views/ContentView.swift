@@ -1,7 +1,9 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @Bindable var store: AppStore
+    @State private var isFileDropTargeted = false
 
     var body: some View {
         NavigationSplitView {
@@ -21,7 +23,17 @@ struct ContentView: View {
                 }
             }
             .background(AppTheme.graphite)
+            .overlay {
+                if isFileDropTargeted {
+                    FileDropOverlay()
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                }
+            }
+            .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isFileDropTargeted) { providers in
+                store.importDroppedProviders(providers)
+            }
             .animation(.smooth(duration: 0.22), value: store.isInspectorPresented)
+            .animation(.smooth(duration: 0.16), value: isFileDropTargeted)
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -84,7 +96,6 @@ struct ContentView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
-        .background(WindowDragConfigurator())
         .preferredColorScheme(.dark)
     }
 
@@ -92,6 +103,33 @@ struct ContentView: View {
         Binding(
             get: { store.errorMessage != nil },
             set: { if !$0 { store.errorMessage = nil } }
+        )
+    }
+}
+
+private struct FileDropOverlay: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "doc.badge.plus")
+                .font(.system(size: 34, weight: .medium))
+                .foregroundStyle(AppTheme.brass)
+            Text("松开以导入 SRT")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(AppTheme.ivory)
+            Text("支持一次拖入多个字幕文件")
+                .font(.callout)
+                .foregroundStyle(AppTheme.mutedIvory)
+        }
+        .padding(.vertical, 28)
+        .padding(.horizontal, 34)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(AppTheme.graphiteRaised)
+                .shadow(color: .black.opacity(0.28), radius: 28, y: 12)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(AppTheme.brass.opacity(0.7), lineWidth: 1)
         )
     }
 }
