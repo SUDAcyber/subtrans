@@ -8,11 +8,20 @@ struct ContentView: View {
             SidebarView(store: store)
                 .navigationSplitViewColumnWidth(min: 230, ideal: 270, max: 340)
         } detail: {
-            WorkspaceView(store: store)
-        }
-        .inspector(isPresented: $store.isInspectorPresented) {
-            InspectorView(store: store)
-                .inspectorColumnWidth(min: 320, ideal: 370, max: 460)
+            HStack(spacing: 0) {
+                WorkspaceView(store: store)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if store.isInspectorPresented {
+                    Divider()
+                        .overlay(AppTheme.graphitePanel)
+                    InspectorView(store: store)
+                        .frame(width: 372)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+            }
+            .background(AppTheme.graphite)
+            .animation(.smooth(duration: 0.22), value: store.isInspectorPresented)
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -24,7 +33,7 @@ struct ContentView: View {
                 .help("导入 SRT")
 
                 Picker("目标语言", selection: $store.settings.targetLanguage) {
-                    ForEach(["简体中文", "繁體中文", "English", "日本語", "한국어", "Español", "Français", "Deutsch"], id: \.self) {
+                    ForEach(["简体中文", "繁体中文", "英文", "日文", "韩文", "西班牙文", "法文", "德文"], id: \.self) {
                         Text($0).tag($0)
                     }
                 }
@@ -75,6 +84,7 @@ struct ContentView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
+        .background(WindowDragConfigurator())
         .preferredColorScheme(.dark)
     }
 

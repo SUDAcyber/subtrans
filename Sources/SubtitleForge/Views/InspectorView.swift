@@ -3,6 +3,7 @@ import SubtitleForgeCore
 
 struct InspectorView: View {
     @Bindable var store: AppStore
+    private let targetLanguages = ["简体中文", "繁体中文", "英文", "日文", "韩文", "西班牙文", "法文", "德文", "葡萄牙文", "俄文"]
 
     var body: some View {
         ScrollView {
@@ -45,20 +46,28 @@ struct InspectorView: View {
                     store.applyOpenAIPreset()
                 }
             }
+            .buttonStyle(.bordered)
 
-            TextField("Provider", text: $store.settings.providerName)
-            TextField("Base URL", text: $store.settings.baseURL)
-                .textContentType(.URL)
-            SecureField("API Key", text: $store.apiKey)
-                .onChange(of: store.apiKey) { _, _ in
-                    store.saveAPIKey()
-                }
+            SettingsField(title: "接口名称") {
+                TextField("接口名称", text: $store.settings.providerName)
+            }
+
+            SettingsField(title: "接口地址") {
+                TextField("接口地址", text: $store.settings.baseURL)
+                    .textContentType(.URL)
+            }
+
+            SettingsField(title: "密钥") {
+                SecureField("密钥", text: $store.apiKey)
+            }
         }
     }
 
     private var modelSection: some View {
         SettingsGroup(title: "模型") {
-            TextField("Model", text: $store.settings.model)
+            SettingsField(title: "模型名称") {
+                TextField("模型名称", text: $store.settings.model)
+            }
 
             Picker("接口模式", selection: $store.settings.endpoint) {
                 ForEach(TranslationEndpoint.allCases) { endpoint in
@@ -68,29 +77,22 @@ struct InspectorView: View {
             .pickerStyle(.segmented)
 
             Picker("目标语言", selection: $store.settings.targetLanguage) {
-                ForEach(["简体中文", "繁體中文", "English", "日本語", "한국어", "Español", "Français", "Deutsch", "Português", "Русский"], id: \.self) {
+                ForEach(targetLanguages, id: \.self) {
                     Text($0).tag($0)
                 }
             }
 
             TextField("自定义目标语言", text: $store.settings.targetLanguage)
 
-            HStack {
-                Text("Temperature")
-                Slider(value: $store.settings.temperature, in: 0...1, step: 0.1)
-                Text(store.settings.temperature, format: .number.precision(.fractionLength(1)))
-                    .frame(width: 32, alignment: .trailing)
-            }
-
-            Picker("Reasoning", selection: $store.settings.reasoningEffort) {
+            Picker("推理深度", selection: $store.settings.reasoningEffort) {
                 ForEach(ReasoningEffort.allCases) { effort in
-                    Text(effort.rawValue).tag(effort)
+                    Text(effort.displayName).tag(effort)
                 }
             }
 
-            Picker("Verbosity", selection: $store.settings.textVerbosity) {
+            Picker("输出长度", selection: $store.settings.textVerbosity) {
                 ForEach(TextVerbosity.allCases) { verbosity in
-                    Text(verbosity.rawValue).tag(verbosity)
+                    Text(verbosity.displayName).tag(verbosity)
                 }
             }
 
@@ -100,11 +102,11 @@ struct InspectorView: View {
 
     private var chunkSection: some View {
         SettingsGroup(title: "分段") {
-            Stepper("每批 \(store.settings.chunkCueLimit) 条", value: $store.settings.chunkCueLimit, in: 10...220, step: 10)
-            Stepper("字符上限 \(store.settings.maxSourceCharacters)", value: $store.settings.maxSourceCharacters, in: 1_500...20_000, step: 500)
-            Stepper("上下文 \(store.settings.contextOverlap) 条", value: $store.settings.contextOverlap, in: 0...20, step: 1)
-            Stepper("失败重试 \(store.settings.retryLimit) 次", value: $store.settings.retryLimit, in: 0...5, step: 1)
-            Stepper("预览 \(store.previewCueLimit) 条", value: $store.previewCueLimit, in: 100...5_000, step: 100)
+            NumericSettingRow(title: "每批条数", suffix: "条", value: $store.settings.chunkCueLimit, range: 1...500, step: 10)
+            NumericSettingRow(title: "字符上限", suffix: "字", value: $store.settings.maxSourceCharacters, range: 500...50_000, step: 500)
+            NumericSettingRow(title: "上下文", suffix: "条", value: $store.settings.contextOverlap, range: 0...50, step: 1)
+            NumericSettingRow(title: "失败重试", suffix: "次", value: $store.settings.retryLimit, range: 0...10, step: 1)
+            NumericSettingRow(title: "预览数量", suffix: "条", value: $store.previewCueLimit, range: 50...20_000, step: 100)
         }
     }
 
@@ -152,5 +154,64 @@ private struct SettingsGroup<Content: View>: View {
                 content
             }
         }
+    }
+}
+
+private struct SettingsField<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(AppTheme.mutedIvory)
+            content
+        }
+    }
+}
+
+private struct NumericSettingRow: View {
+    let title: String
+    let suffix: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .foregroundStyle(AppTheme.ivory)
+                .frame(width: 76, alignment: .leading)
+
+            TextField("", value: boundedValue, format: .number)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 86)
+                .onSubmit(clampValue)
+
+            Text(suffix)
+                .foregroundStyle(AppTheme.mutedIvory)
+                .frame(width: 22, alignment: .leading)
+
+            Spacer(minLength: 8)
+
+            Stepper("", value: boundedValue, in: range, step: step)
+                .labelsHidden()
+                .frame(width: 54)
+        }
+        .onChange(of: value) { _, _ in
+            clampValue()
+        }
+    }
+
+    private var boundedValue: Binding<Int> {
+        Binding(
+            get: { value },
+            set: { value = min(max($0, range.lowerBound), range.upperBound) }
+        )
+    }
+
+    private func clampValue() {
+        value = min(max(value, range.lowerBound), range.upperBound)
     }
 }

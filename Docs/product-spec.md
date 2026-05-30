@@ -10,10 +10,10 @@
 - 本地解析字幕序号、时间轴和文本。
 - 目标语言可指定，默认简体中文。
 - 默认 AIHubMix：`https://aihubmix.com/v1`，模型默认 `gpt-5.5`。
-- 支持任意 OpenAI 兼容服务：可改 Base URL、API Key、模型名。
-- 支持 Chat Completions 和 Responses 两种接口模式。
-- 支持 reasoning effort、verbosity、temperature、分段大小、上下文重叠、失败重试。
-- API Key 存入 macOS Keychain。
+- 支持任意 OpenAI 兼容服务：可改接口地址、密钥、模型名。
+- 支持聊天补全和 Responses 两种接口模式。
+- 支持推理深度、输出长度、分段大小、上下文重叠、失败重试。
+- 密钥存入 macOS Keychain。
 - 翻译后本地重建 SRT，保留原序号和原时间轴。
 - 导出 UTF-8 SRT。
 
@@ -100,12 +100,12 @@ translatedText
 
 ### 右侧检查器
 
-- Provider 和 Base URL
-- API Key
+- 接口名称和接口地址
+- 密钥
 - 模型名
-- Chat Completions / Responses
+- 聊天补全 / Responses
 - 目标语言
-- temperature / reasoning / verbosity
+- 推理深度 / 输出长度
 - 每批条数、字符上限、上下文重叠、失败重试
 - 翻译指令
 - 校验统计

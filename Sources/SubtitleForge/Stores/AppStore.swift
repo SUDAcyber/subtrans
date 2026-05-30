@@ -7,19 +7,31 @@ import UniformTypeIdentifiers
 @MainActor
 @Observable
 final class AppStore {
+    private let keychain = KeychainService()
+    private let client: any SubtitleTranslationClient
+    private var translationTask: Task<Void, Never>?
+
     var documents: [SubtitleDocument] = []
     var selectedDocumentID: UUID?
-    var settings = TranslationSettings.aiHubMixDefault
-    var apiKey: String
+    var settings = UserPreferencesStore.loadSettings() {
+        didSet {
+            UserPreferencesStore.saveSettings(settings)
+        }
+    }
+    var apiKey = "" {
+        didSet {
+            keychain.saveAPIKey(apiKey)
+        }
+    }
     var progress = TranslationProgress()
     var validation = ValidationReport()
     var errorMessage: String?
     var isInspectorPresented = true
-    var previewCueLimit = 800
-
-    private let keychain = KeychainService()
-    private let client: any SubtitleTranslationClient
-    private var translationTask: Task<Void, Never>?
+    var previewCueLimit = UserPreferencesStore.loadPreviewCueLimit() {
+        didSet {
+            UserPreferencesStore.savePreviewCueLimit(previewCueLimit)
+        }
+    }
 
     init(client: any SubtitleTranslationClient = OpenAICompatibleClient()) {
         self.client = client
@@ -54,6 +66,7 @@ final class AppStore {
         if settings.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             settings.model = "gpt-5.5"
         }
+        UserPreferencesStore.saveSettings(settings)
     }
 
     func applyOpenAIPreset() {
@@ -62,6 +75,7 @@ final class AppStore {
         if settings.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             settings.model = "gpt-5.5"
         }
+        UserPreferencesStore.saveSettings(settings)
     }
 
     func importWithPanel() {
@@ -107,7 +121,7 @@ final class AppStore {
             return
         }
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorMessage = "请先在右侧填写 API Key"
+            errorMessage = "请先在右侧填写密钥"
             isInspectorPresented = true
             return
         }
