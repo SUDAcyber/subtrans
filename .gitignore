@@ -1,0 +1,14 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+dist/
+*.xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.swp
+*.tmp
+*.log
+tmp/
+secrets.*
+.env
