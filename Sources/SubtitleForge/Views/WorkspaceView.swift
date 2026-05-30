@@ -9,7 +9,8 @@ struct WorkspaceView: View {
             AppTheme.graphite.ignoresSafeArea()
             if let document = store.selectedDocument {
                 VStack(spacing: 0) {
-                    JobHeaderView(document: document, progress: store.progress, validation: store.validation)
+                    JobHeaderView(store: store, document: document)
+                    FindReplaceToolbar(store: store)
                     Divider().overlay(AppTheme.graphitePanel)
                     SubtitlePreviewView(store: store, document: document)
                 }
@@ -21,13 +22,12 @@ struct WorkspaceView: View {
 }
 
 private struct JobHeaderView: View {
+    @Bindable var store: AppStore
     let document: SubtitleDocument
-    let progress: TranslationProgress
-    let validation: ValidationReport
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .top, spacing: 18) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(document.name)
                         .font(.title2.weight(.semibold))
@@ -36,12 +36,63 @@ private struct JobHeaderView: View {
                     Text("\(document.cues.count) 条 · \(document.targetLanguage)")
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.mutedIvory)
+
+                    if let generatedURL = document.generatedURL {
+                        Text("已生成 \(generatedURL.lastPathComponent)")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.success)
+                            .lineLimit(1)
+                    }
+                    if document.hasReviewWarnings {
+                        Text("有 \(document.reviewCueIDs.count) 条疑似人名需要检查")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(AppTheme.warning)
+                    }
                 }
 
                 Spacer()
 
+                VStack(alignment: .trailing, spacing: 10) {
+                    HStack(spacing: 10) {
+                        if store.isTranslating {
+                            Button {
+                                store.cancelTranslation()
+                            } label: {
+                                Label("停止任务", systemImage: "pause.circle")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(AppTheme.warning)
+                        } else {
+                            Button {
+                                store.translateSelected()
+                            } label: {
+                                Label("开始任务", systemImage: "play.circle.fill")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(AppTheme.brass)
+                            .disabled(!store.canTranslate)
+                        }
+
+                        Button {
+                            store.exportSelectedToSourceFolder()
+                        } label: {
+                            Label("生成字幕", systemImage: "tray.and.arrow.down")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(document.translatedCount == 0 || document.isDeleted)
+
+                        Button {
+                            store.exportSelectedWithPanel()
+                        } label: {
+                            Label("另存为", systemImage: "square.and.arrow.up")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(document.translatedCount == 0 || document.isDeleted)
+                    }
+                }
+
                 StatusCapsule(title: "批次", value: batchText)
-                StatusCapsule(title: "校验", value: validation.summary, accent: validation.isComplete ? AppTheme.success : AppTheme.brass)
+                StatusCapsule(title: "校验", value: store.validation.summary, accent: store.validation.isComplete ? AppTheme.success : AppTheme.brass)
                 StatusCapsule(title: "进度", value: "\(Int(document.completionFraction * 100))%")
             }
 
@@ -54,8 +105,48 @@ private struct JobHeaderView: View {
     }
 
     private var batchText: String {
-        guard progress.totalBatches > 0 else { return "0/0" }
-        return "\(progress.currentBatch)/\(progress.totalBatches)"
+        guard store.progress.totalBatches > 0 else { return "0/0" }
+        return "\(store.progress.currentBatch)/\(store.progress.totalBatches)"
+    }
+}
+
+private struct FindReplaceToolbar: View {
+    @Bindable var store: AppStore
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(AppTheme.mutedIvory)
+
+            TextField("查找译文", text: $store.replacementSearchText)
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: 160)
+
+            TextField("替换为", text: $store.replacementText)
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: 160)
+
+            Toggle("区分大小写", isOn: $store.replacementMatchCase)
+                .toggleStyle(.checkbox)
+
+            Text("\(store.replacementMatchCount) 处")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(store.replacementMatchCount > 0 ? AppTheme.brass : AppTheme.mutedIvory)
+                .frame(width: 48, alignment: .trailing)
+
+            Button("替换一个") {
+                store.replaceOneTranslationMatch()
+            }
+            .disabled(store.selectedDocument == nil || store.replacementSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            Button("全部替换") {
+                store.replaceAllTranslationMatches()
+            }
+            .disabled(store.selectedDocument == nil || store.replacementMatchCount == 0)
+        }
+        .padding(.horizontal, 26)
+        .padding(.vertical, 12)
+        .background(AppTheme.graphiteRaised.opacity(0.72))
     }
 }
 
@@ -92,7 +183,7 @@ private struct SubtitlePreviewView: View {
             LazyVStack(spacing: 1) {
                 HeaderRow()
                 ForEach(Array(document.cues.prefix(store.previewCueLimit))) { cue in
-                    SubtitleCueRow(cue: cue)
+                    SubtitleCueRow(cue: cue, needsReview: document.reviewCueIDs.contains(cue.sequence))
                 }
                 if document.cues.count > store.previewCueLimit {
                     Text("已为界面性能限制预览前 \(store.previewCueLimit) 条 导出仍包含全部 \(document.cues.count) 条")
@@ -125,6 +216,7 @@ private struct HeaderRow: View {
 
 private struct SubtitleCueRow: View {
     let cue: SubtitleCue
+    let needsReview: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -136,6 +228,11 @@ private struct SubtitleCueRow: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(AppTheme.mutedIvory)
                     .textSelection(.enabled)
+                if needsReview {
+                    Label("检查人名", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.warning)
+                }
             }
             .frame(width: 168, alignment: .leading)
 
@@ -154,8 +251,19 @@ private struct SubtitleCueRow: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(cue.hasTranslation ? AppTheme.graphiteRaised : AppTheme.graphitePanel.opacity(0.76))
+                .fill(rowBackground)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(needsReview ? AppTheme.warning.opacity(0.65) : .clear, lineWidth: 1)
+        )
+    }
+
+    private var rowBackground: Color {
+        if needsReview {
+            return AppTheme.warning.opacity(0.14)
+        }
+        return cue.hasTranslation ? AppTheme.graphiteRaised : AppTheme.graphitePanel.opacity(0.76)
     }
 }
 

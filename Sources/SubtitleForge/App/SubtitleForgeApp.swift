@@ -7,7 +7,7 @@ struct SubtitleForgeApp: App {
     @State private var store = AppStore()
 
     var body: some Scene {
-        WindowGroup("Subtitle Forge", id: "main") {
+        WindowGroup("字幕锻造", id: "main") {
             ContentView(store: store)
                 .frame(minWidth: 1180, minHeight: 760)
         }

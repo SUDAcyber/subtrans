@@ -1,7 +1,7 @@
 import Foundation
 import SubtitleForgeCore
 
-struct SubtitleDocument: Identifiable, Hashable {
+struct SubtitleDocument: Codable, Identifiable, Hashable {
     let id: UUID
     var name: String
     var sourceURL: URL?
@@ -9,6 +9,9 @@ struct SubtitleDocument: Identifiable, Hashable {
     var rawByteCount: Int
     var targetLanguage: String
     var cues: [SubtitleCue]
+    var generatedURL: URL?
+    var deletedAt: Date?
+    var reviewCueIDs: Set<Int>
 
     init(
         id: UUID = UUID(),
@@ -17,7 +20,10 @@ struct SubtitleDocument: Identifiable, Hashable {
         importedAt: Date = Date(),
         rawByteCount: Int,
         targetLanguage: String,
-        cues: [SubtitleCue]
+        cues: [SubtitleCue],
+        generatedURL: URL? = nil,
+        deletedAt: Date? = nil,
+        reviewCueIDs: Set<Int> = []
     ) {
         self.id = id
         self.name = name
@@ -26,6 +32,9 @@ struct SubtitleDocument: Identifiable, Hashable {
         self.rawByteCount = rawByteCount
         self.targetLanguage = targetLanguage
         self.cues = cues
+        self.generatedURL = generatedURL
+        self.deletedAt = deletedAt
+        self.reviewCueIDs = reviewCueIDs
     }
 
     var translatedCount: Int {
@@ -39,6 +48,14 @@ struct SubtitleDocument: Identifiable, Hashable {
 
     var displayByteSize: String {
         ByteCountFormatter.string(fromByteCount: Int64(rawByteCount), countStyle: .file)
+    }
+
+    var isDeleted: Bool {
+        deletedAt != nil
+    }
+
+    var hasReviewWarnings: Bool {
+        !reviewCueIDs.isEmpty
     }
 }
 

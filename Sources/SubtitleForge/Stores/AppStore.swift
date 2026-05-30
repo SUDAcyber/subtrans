@@ -11,8 +11,18 @@ final class AppStore {
     private let client: any SubtitleTranslationClient
     private var translationTask: Task<Void, Never>?
 
-    var documents: [SubtitleDocument] = []
-    var selectedDocumentID: UUID?
+    var documents: [SubtitleDocument] = DocumentHistoryStore.load() {
+        didSet {
+            DocumentHistoryStore.save(documents)
+        }
+    }
+    var selectedDocumentID: UUID? {
+        didSet {
+            if let selectedDocument {
+                validation = ValidationReport.make(cues: selectedDocument.cues)
+            }
+        }
+    }
     var settings = UserPreferencesStore.loadSettings() {
         didSet {
             UserPreferencesStore.saveSettings(settings)
@@ -39,6 +49,11 @@ final class AppStore {
     init(client: any SubtitleTranslationClient = OpenAICompatibleClient()) {
         self.client = client
         self.apiKey = keychain.loadAPIKey()
+        emptyExpiredTrash()
+        self.selectedDocumentID = activeDocuments.first?.id ?? trashedDocuments.first?.id
+        if let selectedDocument {
+            self.validation = ValidationReport.make(cues: selectedDocument.cues)
+        }
     }
 
     var selectedDocument: SubtitleDocument? {
@@ -51,8 +66,19 @@ final class AppStore {
         return documents.firstIndex { $0.id == selectedDocumentID }
     }
 
+    var activeDocuments: [SubtitleDocument] {
+        documents.filter { !$0.isDeleted }
+    }
+
+    var trashedDocuments: [SubtitleDocument] {
+        documents.filter(\.isDeleted)
+            .sorted { ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast) }
+    }
+
     var canTranslate: Bool {
-        selectedDocument != nil && !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isTranslating
+        selectedDocument?.isDeleted == false
+            && !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isTranslating
     }
 
     var replacementMatchCount: Int {
@@ -200,11 +226,52 @@ final class AppStore {
 
     func clearTranslations() {
         guard let index = selectedDocumentIndex else { return }
+        guard !documents[index].isDeleted else { return }
         for cueIndex in documents[index].cues.indices {
             documents[index].cues[cueIndex].translation = nil
         }
+        documents[index].generatedURL = nil
+        documents[index].reviewCueIDs = []
         validation = ValidationReport.make(cues: documents[index].cues)
         progress = TranslationProgress(phase: .idle, message: "译文已清空")
+    }
+
+    func moveSelectedToTrash() {
+        guard let id = selectedDocumentID else { return }
+        moveDocumentToTrash(id: id)
+    }
+
+    func moveDocumentToTrash(id: UUID) {
+        guard let index = documents.firstIndex(where: { $0.id == id }) else { return }
+        documents[index].deletedAt = Date()
+        if selectedDocumentID == id {
+            selectedDocumentID = activeDocuments.first?.id ?? trashedDocuments.first?.id
+        }
+        progress = TranslationProgress(phase: .idle, message: "已移到回收箱")
+    }
+
+    func restoreDocument(id: UUID) {
+        guard let index = documents.firstIndex(where: { $0.id == id }) else { return }
+        documents[index].deletedAt = nil
+        selectedDocumentID = id
+        validation = ValidationReport.make(cues: documents[index].cues)
+        progress = TranslationProgress(phase: .idle, message: "已恢复")
+    }
+
+    func permanentlyDeleteDocument(id: UUID) {
+        documents.removeAll { $0.id == id }
+        if selectedDocumentID == id {
+            selectedDocumentID = activeDocuments.first?.id ?? trashedDocuments.first?.id
+        }
+        progress = TranslationProgress(phase: .idle, message: "已永久删除")
+    }
+
+    func emptyExpiredTrash(now: Date = Date()) {
+        let expiration = Calendar.current.date(byAdding: .day, value: -15, to: now) ?? now
+        documents.removeAll { document in
+            guard let deletedAt = document.deletedAt else { return false }
+            return deletedAt < expiration
+        }
     }
 
     func replaceOneTranslationMatch() {
@@ -316,7 +383,23 @@ final class AppStore {
         do {
             let text = SRTParser.render(document.cues, preferTranslations: true)
             try text.write(to: url, atomically: true, encoding: .utf8)
+            if let index = selectedDocumentIndex {
+                documents[index].generatedURL = url
+            }
             progress = TranslationProgress(phase: .finished, message: "已导出")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func exportSelectedToSourceFolder() {
+        guard let index = selectedDocumentIndex else {
+            errorMessage = "没有可导出的字幕"
+            return
+        }
+        do {
+            let url = try writeVersionToSourceFolder(documentIndex: index)
+            progress = TranslationProgress(phase: .finished, message: "已生成 \(url.lastPathComponent)")
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -367,11 +450,18 @@ final class AppStore {
             }
 
             refreshValidation(for: documentID)
+            markReviewWarnings(for: documentID, settings: settings)
+            var completionMessage = validation.isComplete ? "翻译完成" : "完成但仍有缺失"
+            if validation.isComplete,
+               let index = documents.firstIndex(where: { $0.id == documentID }),
+               let url = try? writeVersionToSourceFolder(documentIndex: index) {
+                completionMessage = "翻译完成 已生成 \(url.lastPathComponent)"
+            }
             progress = TranslationProgress(
                 phase: .finished,
                 currentBatch: batches.count,
                 totalBatches: batches.count,
-                message: validation.isComplete ? "翻译完成" : "完成但仍有缺失"
+                message: completionMessage
             )
         } catch is CancellationError {
             progress = TranslationProgress(phase: .cancelled, message: "已停止")
@@ -427,6 +517,46 @@ final class AppStore {
         validation = ValidationReport.make(cues: document.cues)
     }
 
+    private func writeVersionToSourceFolder(documentIndex: Int) throws -> URL {
+        guard let sourceURL = documents[documentIndex].sourceURL else {
+            throw ExportError.missingSourceFolder
+        }
+        let directory = sourceURL.deletingLastPathComponent()
+        let baseName = sourceURL.deletingPathExtension().lastPathComponent
+        let language = documents[documentIndex].targetLanguage
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        let baseOutput = "\(baseName)-\(language)"
+        let outputURL = uniqueOutputURL(directory: directory, baseName: baseOutput)
+        let text = SRTParser.render(documents[documentIndex].cues, preferTranslations: true)
+        try text.write(to: outputURL, atomically: true, encoding: .utf8)
+        documents[documentIndex].generatedURL = outputURL
+        return outputURL
+    }
+
+    private func uniqueOutputURL(directory: URL, baseName: String) -> URL {
+        var candidate = directory.appendingPathComponent("\(baseName).srt")
+        var version = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = directory.appendingPathComponent("\(baseName)-v\(version).srt")
+            version += 1
+        }
+        return candidate
+    }
+
+    private func markReviewWarnings(for documentID: UUID, settings: TranslationSettings) {
+        guard let index = documents.firstIndex(where: { $0.id == documentID }) else { return }
+        let protectedNames = Set(
+            settings.translationMemory.flatMap { [$0.source.normalizedNameKey, $0.target.normalizedNameKey] }
+        )
+        let warningIDs = documents[index].cues.compactMap { cue -> Int? in
+            let candidates = cue.text.probableNameCandidates()
+                .filter { !protectedNames.contains($0.normalizedNameKey) }
+            return candidates.isEmpty ? nil : cue.sequence
+        }
+        documents[index].reviewCueIDs = Set(warningIDs)
+    }
+
     private nonisolated static func fileURL(from item: NSSecureCoding?) -> URL? {
         if let url = item as? URL {
             return url
@@ -451,6 +581,17 @@ final class AppStore {
             return url
         }
         return URL(fileURLWithPath: trimmed)
+    }
+}
+
+private enum ExportError: LocalizedError {
+    case missingSourceFolder
+
+    var errorDescription: String? {
+        switch self {
+        case .missingSourceFolder:
+            return "这个字幕没有原始文件夹信息 请使用导出字幕选择保存位置"
+        }
     }
 }
 
@@ -481,5 +622,52 @@ private extension String {
     func replacingAllOccurrences(of needle: String, with replacement: String, matchCase: Bool) -> String {
         let options: String.CompareOptions = matchCase ? [] : [.caseInsensitive]
         return replacingOccurrences(of: needle, with: replacement, options: options)
+    }
+}
+
+private extension String {
+    var normalizedNameKey: String {
+        folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    func probableNameCandidates() -> [String] {
+        let words = components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        let stopwords: Set<String> = [
+            "I", "A", "The", "This", "That", "These", "Those", "Did", "Do", "Does", "Is", "Are", "Was", "Were",
+            "Can", "Could", "Would", "Should", "Will", "May", "Maybe", "Yes", "No", "Not", "And", "But", "Or",
+            "If", "Then", "When", "Where", "Why", "How", "What", "Who", "Please", "Mom", "Dad", "Sir", "Mr", "Ms"
+        ]
+
+        var candidates: [String] = []
+        var index = 0
+        while index < words.count {
+            let word = words[index]
+            if word.isProbableNameWord && !stopwords.contains(word) {
+                var phrase = word
+                if index + 1 < words.count {
+                    let next = words[index + 1]
+                    if next.isProbableNameWord && !stopwords.contains(next) {
+                        phrase += " \(next)"
+                        index += 1
+                    }
+                }
+                candidates.append(phrase)
+            }
+            index += 1
+        }
+        return candidates
+    }
+
+    var isProbableNameWord: Bool {
+        guard count >= 3,
+              let first = unicodeScalars.first,
+              CharacterSet.uppercaseLetters.contains(first)
+        else {
+            return false
+        }
+        return unicodeScalars.dropFirst().contains { CharacterSet.lowercaseLetters.contains($0) }
     }
 }

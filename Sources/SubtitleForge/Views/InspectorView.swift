@@ -15,7 +15,6 @@ struct InspectorView: View {
                 providerSection
                 modelSection
                 chunkSection
-                replaceSection
                 memorySection
                 promptSection
                 validationSection
@@ -115,40 +114,18 @@ struct InspectorView: View {
         }
     }
 
-    private var replaceSection: some View {
-        SettingsGroup(title: "译文查找替换") {
-            SettingsField(title: "查找译文") {
-                TextField("例如 二哥", text: $store.replacementSearchText)
-            }
-
-            SettingsField(title: "替换为") {
-                TextField("例如 Ko Song", text: $store.replacementText)
-            }
-
-            HStack {
-                Toggle("区分大小写", isOn: $store.replacementMatchCase)
-                Spacer()
-                Text("\(store.replacementMatchCount) 处")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(store.replacementMatchCount > 0 ? AppTheme.brass : AppTheme.mutedIvory)
-            }
-
-            HStack {
-                Button("替换一个") {
-                    store.replaceOneTranslationMatch()
-                }
-                .disabled(store.selectedDocument == nil || store.replacementSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                Button("全部替换") {
-                    store.replaceAllTranslationMatches()
-                }
-                .disabled(store.selectedDocument == nil || store.replacementMatchCount == 0)
-            }
-        }
-    }
-
     private var memorySection: some View {
-        SettingsGroup(title: "后台记忆库") {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("后台记忆库", systemImage: "brain.head.profile")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.brass)
+                Spacer()
+                Text("\(store.settings.translationMemory.count) 条")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(AppTheme.mutedIvory)
+            }
+
             SettingsField(title: "原文或名字") {
                 TextField("例如 Ko Song 或 เซิร์ฟ", text: $memorySource)
             }
@@ -184,6 +161,11 @@ struct InspectorView: View {
             }
             .frame(maxHeight: 220)
         }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(AppTheme.graphitePanel.opacity(0.92))
+        )
     }
 
     private var promptSection: some View {

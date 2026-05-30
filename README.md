@@ -1,6 +1,6 @@
-# Subtitle Forge
+# 字幕锻造
 
-Subtitle Forge 是一个 macOS 字幕翻译工具，默认使用 AIHubMix 的 OpenAI 兼容接口，也可以切换到任意兼容 `/v1/chat/completions` 或 `/v1/responses` 的大模型服务。
+字幕锻造是一个 macOS 字幕翻译工具，默认使用 AIHubMix 的 OpenAI 兼容接口，也可以切换到任意兼容 `/v1/chat/completions` 或 `/v1/responses` 的大模型服务。
 
 ![UI concept](Docs/Concepts/subtitle-forge-ui-concept.png)
 
@@ -14,6 +14,9 @@ Subtitle Forge 是一个 macOS 字幕翻译工具，默认使用 AIHubMix 的 Op
 - 支持从 Finder 直接拖入一个或多个 `.srt` 文件。
 - 后台记忆库：可保存人名、泰语名、术语等固定译法，每次翻译都会注入提示词。
 - 译文查找替换：可搜索译文中的错误并替换一个或全部匹配项。
+- 翻译完成后会在原字幕文件夹下自动生成一个新版本，避免覆盖原文件。
+- 历史记录支持移到回收箱，15 天后自动清理，也可以手动永久删除。
+- 疑似未确认人名会在翻译完成后高亮提醒检查。
 
 ## 默认接口
 
