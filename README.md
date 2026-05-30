@@ -10,18 +10,18 @@ Subtitle Forge 是一个 macOS 字幕翻译工具，默认使用 AIHubMix 的 Op
 - 分批翻译：按 cue 数量和字符预算切分，支持上下文重叠，避免超长文件一次性塞进模型。
 - JSON 校验：模型必须按 cue id 返回译文，本地检查漏译和多译。
 - 本地重建：导出时使用原始序号和时间轴，只替换字幕文本。
-- 可配置接口：API Key、Base URL、模型名、Chat Completions/Responses、reasoning、temperature 都可调整。
+- 可配置接口：密钥、接口地址、模型名、聊天补全/Responses、推理深度、输出长度都可调整。
 
 ## 默认接口
 
 ```text
-Provider: AIHubMix
-Base URL: https://aihubmix.com/v1
-Model: gpt-5.5
-Endpoint: Chat Completions
+接口名称: AIHubMix
+接口地址: https://aihubmix.com/v1
+模型: gpt-5.5
+接口模式: 聊天补全
 ```
 
-API Key 会写入 macOS Keychain，不会提交到 git。
+密钥会写入 macOS Keychain，不会提交到 git。
 
 ## 长字幕处理流程
 

@@ -9,9 +9,9 @@ public enum TranslationEndpoint: String, CaseIterable, Codable, Identifiable, Se
     public var displayName: String {
         switch self {
         case .chatCompletions:
-            return "Chat Completions"
+            return "聊天补全"
         case .responses:
-            return "Responses"
+            return "Responses 接口"
         }
     }
 }
@@ -23,6 +23,19 @@ public enum ReasoningEffort: String, CaseIterable, Codable, Identifiable, Sendab
     case high
 
     public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .none:
+            return "模型默认"
+        case .low:
+            return "低"
+        case .medium:
+            return "中"
+        case .high:
+            return "高"
+        }
+    }
 }
 
 public enum TextVerbosity: String, CaseIterable, Codable, Identifiable, Sendable {
@@ -31,6 +44,17 @@ public enum TextVerbosity: String, CaseIterable, Codable, Identifiable, Sendable
     case high
 
     public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .low:
+            return "短"
+        case .medium:
+            return "中"
+        case .high:
+            return "长"
+        }
+    }
 }
 
 public struct TranslationSettings: Codable, Equatable, Sendable {
@@ -39,7 +63,6 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
     public var model: String
     public var endpoint: TranslationEndpoint
     public var targetLanguage: String
-    public var temperature: Double
     public var reasoningEffort: ReasoningEffort
     public var textVerbosity: TextVerbosity
     public var chunkCueLimit: Int
@@ -56,7 +79,6 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         model: String = "gpt-5.5",
         endpoint: TranslationEndpoint = .chatCompletions,
         targetLanguage: String = "简体中文",
-        temperature: Double = 0.4,
         reasoningEffort: ReasoningEffort = .medium,
         textVerbosity: TextVerbosity = .low,
         chunkCueLimit: Int = 60,
@@ -72,7 +94,6 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         self.model = model
         self.endpoint = endpoint
         self.targetLanguage = targetLanguage
-        self.temperature = temperature
         self.reasoningEffort = reasoningEffort
         self.textVerbosity = textVerbosity
         self.chunkCueLimit = chunkCueLimit
@@ -101,7 +122,7 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
     3 如果目标语言是中文 译文中严禁出现标点符号 句内停顿使用一个空格代替 句末不需要任何符号或空格
     4 译文要口语化 简洁 自然 避免翻译腔
     5 必须结合上下文 不要逐字直译
-    6 人名地名使用常见通译 如果不确定请保留原文
+    6 人名地名优先使用常见英文通译或官方英文名 如果目标语言有非常通用的标准译名可使用该译名 如果不确定请保留英文原文
     7 省略无意义的 uh um ah 等语气词 除非它们对剧情表达至关重要
     """
 }

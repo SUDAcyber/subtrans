@@ -33,7 +33,7 @@ private struct JobHeaderView: View {
                         .font(.title2.weight(.semibold))
                         .foregroundStyle(AppTheme.ivory)
                         .lineLimit(1)
-                    Text("\(document.cues.count) cues · \(document.targetLanguage)")
+                    Text("\(document.cues.count) 条 · \(document.targetLanguage)")
                         .font(.subheadline)
                         .foregroundStyle(AppTheme.mutedIvory)
                 }

@@ -12,7 +12,7 @@ public enum OpenAICompatibleClientError: Error, LocalizedError {
         case let .invalidBaseURL(value):
             return "接口地址无效：\(value)"
         case .emptyAPIKey:
-            return "请先填写 API Key"
+            return "请先填写密钥"
         case .emptyModel:
             return "请先填写模型名称"
         case .emptyResponse:
@@ -75,7 +75,6 @@ public final class OpenAICompatibleClient: SubtitleTranslationClient, @unchecked
 
         let body: [String: Any] = [
             "model": settings.model,
-            "temperature": settings.temperature,
             "messages": [
                 ["role": "system", "content": system],
                 ["role": "user", "content": user]
