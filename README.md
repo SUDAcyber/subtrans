@@ -1,6 +1,6 @@
-# 字幕锻造
+# SUDA字幕翻译助手
 
-字幕锻造是一个 macOS 字幕翻译工具，默认使用 AIHubMix 的 OpenAI 兼容接口，也可以切换到任意兼容 `/v1/chat/completions` 或 `/v1/responses` 的大模型服务。
+SUDA字幕翻译助手是一个 macOS 字幕翻译工具，默认使用 AIHubMix 的 OpenAI 兼容接口，也可以切换到任意兼容 `/v1/chat/completions` 或 `/v1/responses` 的大模型服务。
 
 ![UI concept](Docs/Concepts/subtitle-forge-ui-concept.png)
 

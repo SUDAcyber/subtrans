@@ -8,7 +8,7 @@ struct SidebarView: View {
             HStack(spacing: 10) {
                 Image(systemName: AppIconSymbol.app)
                     .foregroundStyle(AppTheme.brass)
-                Text("字幕锻造")
+                Text("项目管理")
                     .font(.headline.weight(.semibold))
                 Spacer()
                 Button {
