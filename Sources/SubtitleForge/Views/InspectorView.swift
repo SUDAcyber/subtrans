@@ -6,21 +6,24 @@ struct InspectorView: View {
     @State private var memorySource = ""
     @State private var memoryTarget = ""
     @State private var memoryNote = "专名"
+    @State private var selectedTab: InspectorTab = .model
     private let targetLanguages = ["简体中文", "繁体中文", "英文", "日文", "韩文", "西班牙文", "法文", "德文", "葡萄牙文", "俄文"]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                header
-                appearanceSection
-                providerSection
-                modelSection
-                chunkSection
-                memorySection
-                promptSection
-                validationSection
-            }
-            .padding(18)
+        VStack(spacing: 0) {
+            header
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 12)
+
+            InspectorTabBar(selection: $selectedTab)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 12)
+
+            Divider()
+                .overlay(AppTheme.divider)
+
+            tabContent
         }
         .background(AppTheme.graphiteRaised)
     }
@@ -34,10 +37,41 @@ struct InspectorView: View {
             Button {
                 store.isInspectorPresented = false
             } label: {
-                Image(systemName: "xmark")
+                Image(systemName: AppIconSymbol.close)
             }
             .buttonStyle(.borderless)
             .help("关闭")
+        }
+    }
+
+    @ViewBuilder
+    private var tabContent: some View {
+        switch selectedTab {
+        case .model:
+            tabScroll {
+                appearanceSection
+                providerSection
+                modelSection
+                chunkSection
+            }
+        case .memory:
+            tabScroll {
+                memorySection
+            }
+        case .quality:
+            tabScroll {
+                promptSection
+                validationSection
+            }
+        }
+    }
+
+    private func tabScroll<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                content()
+            }
+            .padding(18)
         }
     }
 
@@ -131,14 +165,13 @@ struct InspectorView: View {
     }
 
     private var memorySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        SettingsGroup(title: "后台记忆库") {
             HStack {
-                Label("后台记忆库", systemImage: "brain.head.profile")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.brass)
+                Label("\(store.settings.translationMemory.count) 条固定译法", systemImage: AppIconSymbol.memory)
+                    .foregroundStyle(AppTheme.ivory)
                 Spacer()
-                Text("\(store.settings.translationMemory.count) 条")
-                    .font(.caption2.weight(.medium))
+                Text("会随每次翻译一起注入")
+                    .font(.caption)
                     .foregroundStyle(AppTheme.mutedIvory)
             }
 
@@ -155,33 +188,29 @@ struct InspectorView: View {
             }
 
             HStack {
-                Button("加入记忆") {
+                Button {
                     store.addMemoryEntry(source: memorySource, target: memoryTarget, note: memoryNote)
                     memorySource = ""
                     memoryTarget = ""
+                } label: {
+                    Label("加入记忆", systemImage: AppIconSymbol.add)
                 }
 
-                Button("恢复预置") {
+                Button {
                     store.restoreDefaultMemoryEntries()
+                } label: {
+                    Label("恢复预置", systemImage: AppIconSymbol.reset)
                 }
             }
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(store.settings.translationMemory) { entry in
-                        MemoryEntryRow(entry: entry) {
-                            store.removeMemoryEntry(id: entry.id)
-                        }
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(store.settings.translationMemory) { entry in
+                    MemoryEntryRow(entry: entry) {
+                        store.removeMemoryEntry(id: entry.id)
                     }
                 }
             }
-            .frame(maxHeight: 220)
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(AppTheme.graphitePanel.opacity(0.92))
-        )
     }
 
     private var promptSection: some View {
@@ -208,9 +237,70 @@ struct InspectorView: View {
             Button(role: .destructive) {
                 store.clearTranslations()
             } label: {
-                Label("清空译文", systemImage: "trash")
+                Label("清空译文", systemImage: AppIconSymbol.clear)
             }
             .disabled(store.selectedDocument == nil || store.isTranslating)
+        }
+    }
+}
+
+private enum InspectorTab: String, CaseIterable, Identifiable {
+    case model
+    case memory
+    case quality
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .model:
+            return "模型设置"
+        case .memory:
+            return "记忆库"
+        case .quality:
+            return "指令校验"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .model:
+            return AppIconSymbol.modelSettings
+        case .memory:
+            return AppIconSymbol.memory
+        case .quality:
+            return AppIconSymbol.promptValidation
+        }
+    }
+}
+
+private struct InspectorTabBar: View {
+    @Binding var selection: InspectorTab
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(InspectorTab.allCases) { tab in
+                Button {
+                    selection = tab
+                } label: {
+                    Label(tab.title, systemImage: tab.systemImage)
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(selection == tab ? AppTheme.ivory : AppTheme.mutedIvory)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(selection == tab ? AppTheme.graphitePanel : .clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(selection == tab ? AppTheme.divider : .clear, lineWidth: 1)
+                )
+                .help(tab.title)
+            }
         }
     }
 }
@@ -244,7 +334,7 @@ private struct MemoryEntryRow: View {
             Button {
                 onRemove()
             } label: {
-                Image(systemName: "minus.circle")
+                Image(systemName: AppIconSymbol.remove)
             }
             .buttonStyle(.borderless)
             .foregroundStyle(AppTheme.mutedIvory)

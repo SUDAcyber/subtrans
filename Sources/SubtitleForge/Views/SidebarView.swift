@@ -6,7 +6,7 @@ struct SidebarView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "captions.bubble")
+                Image(systemName: AppIconSymbol.app)
                     .foregroundStyle(AppTheme.brass)
                 Text("字幕锻造")
                     .font(.headline.weight(.semibold))
@@ -14,7 +14,7 @@ struct SidebarView: View {
                 Button {
                     store.moveSelectedToTrash()
                 } label: {
-                    Image(systemName: "trash")
+                    Image(systemName: AppIconSymbol.trash)
                 }
                 .buttonStyle(.borderless)
                 .help("移到回收箱")
@@ -23,7 +23,7 @@ struct SidebarView: View {
                 Button {
                     store.importWithPanel()
                 } label: {
-                    Image(systemName: "plus")
+                    Image(systemName: AppIconSymbol.quickAdd)
                 }
                 .buttonStyle(.borderless)
                 .help("导入")
@@ -96,8 +96,8 @@ private struct DocumentRow: View {
     }
 
     private var documentIcon: String {
-        if document.hasReviewWarnings { return "exclamationmark.triangle.fill" }
-        return document.completionFraction >= 1 ? "checkmark.seal.fill" : "doc.text"
+        if document.hasReviewWarnings { return AppIconSymbol.reviewWarning }
+        return document.completionFraction >= 1 ? AppIconSymbol.completed : AppIconSymbol.document
     }
 
     private var documentIconColor: Color {
@@ -112,7 +112,7 @@ private struct TrashDocumentRow: View {
 
     var body: some View {
         HStack(spacing: 9) {
-            Image(systemName: "trash")
+            Image(systemName: AppIconSymbol.trash)
                 .foregroundStyle(AppTheme.mutedIvory)
                 .frame(width: 18)
 
@@ -130,7 +130,7 @@ private struct TrashDocumentRow: View {
             Button {
                 store.restoreDocument(id: document.id)
             } label: {
-                Image(systemName: "arrow.uturn.backward")
+                Image(systemName: AppIconSymbol.restore)
             }
             .buttonStyle(.borderless)
             .help("恢复")
@@ -138,7 +138,7 @@ private struct TrashDocumentRow: View {
             Button {
                 store.permanentlyDeleteDocument(id: document.id)
             } label: {
-                Image(systemName: "xmark.circle")
+                Image(systemName: AppIconSymbol.deleteForever)
             }
             .buttonStyle(.borderless)
             .help("永久删除")

@@ -40,7 +40,7 @@ struct ContentView: View {
                 Button {
                     store.importWithPanel()
                 } label: {
-                    Label("导入", systemImage: "square.and.arrow.down")
+                    Label("导入", systemImage: AppIconSymbol.importFile)
                 }
                 .help("导入 SRT")
 
@@ -71,14 +71,14 @@ struct ContentView: View {
                     Button {
                         store.cancelTranslation()
                     } label: {
-                        Label("停止", systemImage: "pause.circle")
+                        Label("停止", systemImage: AppIconSymbol.stop)
                     }
                     .help("停止翻译")
                 } else {
                     Button {
                         store.translateSelected()
                     } label: {
-                        Label("翻译", systemImage: "play.circle.fill")
+                        Label("翻译", systemImage: AppIconSymbol.translate)
                     }
                     .help("开始翻译")
                     .disabled(!store.canTranslate)
@@ -87,7 +87,7 @@ struct ContentView: View {
                 Button {
                     store.exportSelectedWithPanel()
                 } label: {
-                    Label("导出", systemImage: "square.and.arrow.up")
+                    Label("导出", systemImage: AppIconSymbol.export)
                 }
                 .help("导出 SRT")
                 .disabled(store.selectedDocument == nil)
@@ -95,7 +95,7 @@ struct ContentView: View {
                 Button {
                     store.isInspectorPresented.toggle()
                 } label: {
-                    Label("设置", systemImage: "sidebar.right")
+                    Label("设置", systemImage: AppIconSymbol.inspector)
                 }
                 .help("显示或隐藏设置")
             }
@@ -121,7 +121,7 @@ struct ContentView: View {
 private struct FileDropOverlay: View {
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "doc.badge.plus")
+            Image(systemName: AppIconSymbol.addFile)
                 .font(.system(size: 34, weight: .medium))
                 .foregroundStyle(AppTheme.brass)
             Text("松开以导入 SRT")

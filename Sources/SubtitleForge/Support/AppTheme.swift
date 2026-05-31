@@ -22,11 +22,11 @@ enum AppColorSchemeMode: String, CaseIterable, Codable, Identifiable {
     var systemImage: String {
         switch self {
         case .system:
-            return "circle.lefthalf.filled"
+            return AppIconSymbol.appearance
         case .light:
-            return "sun.max"
+            return AppIconSymbol.appearanceLight
         case .dark:
-            return "moon"
+            return AppIconSymbol.appearanceDark
         }
     }
 

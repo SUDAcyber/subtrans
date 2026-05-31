@@ -38,13 +38,13 @@ private struct JobHeaderView: View {
                         .foregroundStyle(AppTheme.mutedIvory)
 
                     if let generatedURL = document.generatedURL {
-                        Label("已生成 \(generatedURL.lastPathComponent)", systemImage: "checkmark.seal.fill")
+                        Label("已生成 \(generatedURL.lastPathComponent)", systemImage: AppIconSymbol.completed)
                             .font(.caption)
                             .foregroundStyle(AppTheme.success)
                             .lineLimit(1)
                     }
                     if document.hasReviewWarnings {
-                        Label("有 \(document.reviewCueIDs.count) 条疑似人名需要检查", systemImage: "exclamationmark.triangle.fill")
+                        Label("有 \(document.reviewCueIDs.count) 条疑似人名需要检查", systemImage: AppIconSymbol.reviewWarning)
                             .font(.caption.weight(.medium))
                             .foregroundStyle(AppTheme.warning)
                     }
@@ -86,7 +86,7 @@ private struct JobHeaderView: View {
                 Button {
                     store.cancelTranslation()
                 } label: {
-                    Label("停止任务", systemImage: "pause.circle")
+                    Label("停止任务", systemImage: AppIconSymbol.stop)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppTheme.warning)
@@ -94,7 +94,7 @@ private struct JobHeaderView: View {
                 Button {
                     store.translateSelected()
                 } label: {
-                    Label("开始任务", systemImage: "play.circle.fill")
+                    Label("开始任务", systemImage: AppIconSymbol.translate)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(AppTheme.brass)
@@ -104,7 +104,7 @@ private struct JobHeaderView: View {
             Button {
                 store.exportSelectedToSourceFolder()
             } label: {
-                Label("生成字幕", systemImage: "tray.and.arrow.down")
+                Label("生成字幕", systemImage: AppIconSymbol.generate)
             }
             .buttonStyle(.bordered)
             .disabled(document.translatedCount == 0 || document.isDeleted)
@@ -112,7 +112,7 @@ private struct JobHeaderView: View {
             Button {
                 store.exportSelectedWithPanel()
             } label: {
-                Label("另存为", systemImage: "square.and.arrow.up")
+                Label("另存为", systemImage: AppIconSymbol.export)
             }
             .buttonStyle(.bordered)
             .disabled(document.translatedCount == 0 || document.isDeleted)
@@ -142,7 +142,7 @@ private struct FindReplaceToolbar: View {
 
     private var horizontalLayout: some View {
         HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
+            Image(systemName: AppIconSymbol.search)
                 .foregroundStyle(AppTheme.mutedIvory)
 
             TextField("查找译文", text: $store.replacementSearchText)
@@ -176,7 +176,7 @@ private struct FindReplaceToolbar: View {
     private var compactLayout: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("查找替换译文", systemImage: "magnifyingglass")
+                Label("查找替换译文", systemImage: AppIconSymbol.replace)
                     .foregroundStyle(AppTheme.mutedIvory)
                 Spacer()
                 Text("\(store.replacementMatchCount) 处")
@@ -291,7 +291,7 @@ private struct SubtitleCueRow: View {
                     .foregroundStyle(AppTheme.mutedIvory)
                     .textSelection(.enabled)
                 if needsReview {
-                    Label("检查人名", systemImage: "exclamationmark.triangle.fill")
+                    Label("检查人名", systemImage: AppIconSymbol.reviewWarning)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(AppTheme.warning)
                 }
@@ -334,7 +334,7 @@ private struct EmptyStateView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            Image(systemName: "captions.bubble.fill")
+            Image(systemName: AppIconSymbol.emptyState)
                 .font(.system(size: 44))
                 .foregroundStyle(AppTheme.brass)
             VStack(alignment: .leading, spacing: 8) {
@@ -348,7 +348,7 @@ private struct EmptyStateView: View {
             Button {
                 store.importWithPanel()
             } label: {
-                Label("选择字幕文件", systemImage: "square.and.arrow.down")
+                Label("选择字幕文件", systemImage: AppIconSymbol.importFile)
             }
             .buttonStyle(.borderedProminent)
             .tint(AppTheme.brass)
