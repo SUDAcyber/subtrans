@@ -78,6 +78,16 @@ flowchart LR
 swift test
 ```
 
+## 打包发布
+
+生成 macOS `.app`、`.zip` 和 `.dmg`：
+
+```bash
+./script/package_release.sh 0.1.0
+```
+
+产物会输出到 `dist/release/`。如果本机没有 Developer ID 证书，脚本会使用 ad-hoc 签名，适合内部测试；正式对外发布前建议使用 Developer ID 签名并完成 Apple notarization。
+
 ## 版本管理
 
 项目已经初始化为 git 仓库，主分支为 `main`。建议每次完成一个可验证能力后提交，例如：
