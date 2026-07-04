@@ -95,6 +95,8 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
     public var retryLimit: Int
     public var requestTimeoutSeconds: Double
     public var stripTargetPunctuation: Bool
+    public var maxConcurrentRequests: Int
+    public var useContextAnalysis: Bool
     public var promptTemplate: String
     public var translationMemory: [TranslationMemoryEntry]
 
@@ -104,14 +106,16 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         model: String = "gpt-5.5",
         endpoint: TranslationEndpoint = .chatCompletions,
         targetLanguage: String = "简体中文",
-        reasoningEffort: ReasoningEffort = .medium,
+        reasoningEffort: ReasoningEffort = .low,
         textVerbosity: TextVerbosity = .low,
-        chunkCueLimit: Int = 60,
+        chunkCueLimit: Int = 24,
         maxSourceCharacters: Int = 6_000,
-        contextOverlap: Int = 6,
+        contextOverlap: Int = 5,
         retryLimit: Int = 2,
         requestTimeoutSeconds: Double = 120,
         stripTargetPunctuation: Bool = true,
+        maxConcurrentRequests: Int = 5,
+        useContextAnalysis: Bool = true,
         promptTemplate: String = TranslationSettings.defaultPrompt,
         translationMemory: [TranslationMemoryEntry] = TranslationSettings.defaultTranslationMemory
     ) {
@@ -128,6 +132,8 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         self.retryLimit = retryLimit
         self.requestTimeoutSeconds = requestTimeoutSeconds
         self.stripTargetPunctuation = stripTargetPunctuation
+        self.maxConcurrentRequests = maxConcurrentRequests
+        self.useContextAnalysis = useContextAnalysis
         self.promptTemplate = promptTemplate
         self.translationMemory = translationMemory
     }
@@ -146,6 +152,8 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         case retryLimit
         case requestTimeoutSeconds
         case stripTargetPunctuation
+        case maxConcurrentRequests
+        case useContextAnalysis
         case promptTemplate
         case translationMemory
     }
@@ -165,6 +173,8 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         self.retryLimit = try container.decodeIfPresent(Int.self, forKey: .retryLimit) ?? 2
         self.requestTimeoutSeconds = try container.decodeIfPresent(Double.self, forKey: .requestTimeoutSeconds) ?? 120
         self.stripTargetPunctuation = try container.decodeIfPresent(Bool.self, forKey: .stripTargetPunctuation) ?? true
+        self.maxConcurrentRequests = try container.decodeIfPresent(Int.self, forKey: .maxConcurrentRequests) ?? 5
+        self.useContextAnalysis = try container.decodeIfPresent(Bool.self, forKey: .useContextAnalysis) ?? true
         self.promptTemplate = try container.decodeIfPresent(String.self, forKey: .promptTemplate) ?? TranslationSettings.defaultPrompt
         self.translationMemory = try container.decodeIfPresent([TranslationMemoryEntry].self, forKey: .translationMemory)
             ?? TranslationSettings.defaultTranslationMemory

@@ -20,12 +20,36 @@ public enum TranslationResultParserError: Error, Equatable, LocalizedError {
     }
 }
 
+public struct PartialTranslationResult: Equatable, Sendable {
+    public let translations: [Int: String]
+    public let missingIDs: [Int]
+
+    public init(translations: [Int: String], missingIDs: [Int]) {
+        self.translations = translations
+        self.missingIDs = missingIDs
+    }
+}
+
 public enum TranslationResultParser {
     public static func parse(
         _ content: String,
         expectedIDs: [Int],
         stripPunctuation: Bool
     ) throws -> [Int: String] {
+        let result = try parsePartial(content, expectedIDs: expectedIDs, stripPunctuation: stripPunctuation)
+        guard result.missingIDs.isEmpty else {
+            throw TranslationResultParserError.missingIDs(result.missingIDs)
+        }
+        return result.translations
+    }
+
+    /// Lenient variant: accepts whatever valid translations came back, drops IDs
+    /// outside the expected set, and reports the missing ones instead of throwing.
+    public static func parsePartial(
+        _ content: String,
+        expectedIDs: [Int],
+        stripPunctuation: Bool
+    ) throws -> PartialTranslationResult {
         let json = try extractJSON(from: content)
         let data = Data(json.utf8)
         let decoder = JSONDecoder()
@@ -39,26 +63,18 @@ public enum TranslationResultParser {
             throw TranslationResultParserError.invalidJSON
         }
 
+        let expected = Set(expectedIDs)
         var translations: [Int: String] = [:]
-        for item in items {
-            translations[item.id] = stripPunctuation
+        for item in items where expected.contains(item.id) {
+            let text = stripPunctuation
                 ? sanitizeSubtitleText(item.text)
                 : item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            translations[item.id] = text
         }
 
-        let expected = Set(expectedIDs)
-        let returned = Set(translations.keys)
-        let missing = expected.subtracting(returned).sorted()
-        let unexpected = returned.subtracting(expected).sorted()
-
-        guard missing.isEmpty else {
-            throw TranslationResultParserError.missingIDs(missing)
-        }
-        guard unexpected.isEmpty else {
-            throw TranslationResultParserError.unexpectedIDs(unexpected)
-        }
-
-        return translations
+        let missing = expected.subtracting(translations.keys).sorted()
+        return PartialTranslationResult(translations: translations, missingIDs: missing)
     }
 
     private static func extractJSON(from content: String) throws -> String {

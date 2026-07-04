@@ -9,8 +9,8 @@ public enum TranslationPromptBuilderError: Error, LocalizedError {
 }
 
 public enum TranslationPromptBuilder {
-    public static func systemPrompt(settings: TranslationSettings) -> String {
-        """
+    public static func systemPrompt(settings: TranslationSettings, contextSummary: String? = nil) -> String {
+        var prompt = """
         \(settings.promptTemplate)
 
         Protected names and translation memory:
@@ -26,6 +26,18 @@ public enum TranslationPromptBuilder {
         Do not include markdown fences or extra commentary.
         Never change cue ids.
         """
+
+        if let contextSummary, !contextSummary.isEmpty {
+            prompt += """
+
+
+            Story context (shared across all batches, use it to keep names, tone and \
+            terminology consistent):
+            \(contextSummary)
+            """
+        }
+
+        return prompt
     }
 
     public static func userPrompt(batch: TranslationBatch, settings: TranslationSettings) throws -> String {

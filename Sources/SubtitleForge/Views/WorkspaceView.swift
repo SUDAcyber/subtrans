@@ -10,10 +10,14 @@ struct WorkspaceView: View {
             if let document = store.selectedDocument {
                 VStack(spacing: 0) {
                     JobHeaderView(store: store, document: document)
-                    FindReplaceToolbar(store: store)
+                    if store.isFindReplacePresented {
+                        FindReplaceToolbar(store: store)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                     Divider().overlay(AppTheme.divider)
                     SubtitlePreviewView(store: store, document: document)
                 }
+                .animation(.smooth(duration: 0.18), value: store.isFindReplacePresented)
             } else {
                 EmptyStateView(store: store)
             }
@@ -56,25 +60,19 @@ private struct JobHeaderView: View {
                 actionButtons
             }
 
-            HStack(alignment: .center, spacing: 12) {
-                StatusCapsule(title: strings.batch, value: batchText)
-                StatusCapsule(title: strings.validation, value: strings.validationSummary(store.validation), accent: store.validation.isComplete ? AppTheme.success : AppTheme.brass)
-                StatusCapsule(title: strings.progress, value: "\(Int(document.completionFraction * 100))%")
-
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text(strings.taskProgress)
-                        Spacer()
-                        Text(store.progress.message)
-                            .lineLimit(1)
-                    }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(AppTheme.mutedIvory)
-
-                    ProgressView(value: document.completionFraction)
-                        .tint(AppTheme.brass)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(store.progress.message)
+                        .lineLimit(1)
+                    Spacer()
+                    Text(progressDetailText)
+                        .foregroundStyle(store.validation.isComplete ? AppTheme.success : AppTheme.mutedIvory)
                 }
-                .frame(maxWidth: .infinity)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(AppTheme.mutedIvory)
+
+                ProgressView(value: document.completionFraction)
+                    .tint(AppTheme.brass)
             }
         }
         .padding(.horizontal, 26)
@@ -125,9 +123,13 @@ private struct JobHeaderView: View {
         .fixedSize()
     }
 
-    private var batchText: String {
-        guard store.progress.totalBatches > 0 else { return "0/0" }
-        return "\(store.progress.currentBatch)/\(store.progress.totalBatches)"
+    private var progressDetailText: String {
+        let strings = store.strings
+        let percent = "\(Int(document.completionFraction * 100))%"
+        if store.isTranslating, store.progress.totalBatches > 0 {
+            return "\(strings.batch) \(store.progress.currentBatch)/\(store.progress.totalBatches) · \(percent)"
+        }
+        return "\(strings.validationSummary(store.validation)) · \(percent)"
     }
 }
 
@@ -214,31 +216,6 @@ private struct FindReplaceToolbar: View {
                 .disabled(store.selectedDocument == nil || store.replacementMatchCount == 0)
             }
         }
-    }
-}
-
-private struct StatusCapsule: View {
-    let title: String
-    let value: String
-    var accent: Color = AppTheme.blueSlate
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(AppTheme.mutedIvory)
-            Text(value)
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(accent)
-                .lineLimit(1)
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 11)
-        .frame(minWidth: 86, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(AppTheme.graphitePanel)
-        )
     }
 }
 

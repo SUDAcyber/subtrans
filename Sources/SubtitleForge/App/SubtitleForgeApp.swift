@@ -43,6 +43,38 @@ struct SubtitleForgeApp: App {
                 .disabled(store.selectedDocument == nil)
             }
         }
+
+        Settings {
+            AppSettingsView(store: store)
+        }
+    }
+}
+
+private struct AppSettingsView: View {
+    @Bindable var store: AppStore
+
+    var body: some View {
+        let strings = store.strings
+
+        Form {
+            Picker(strings.appLanguage, selection: $store.interfaceLanguage) {
+                ForEach(AppLanguage.allCases) { language in
+                    Text(language.displayName).tag(language)
+                }
+            }
+
+            Picker(strings.theme, selection: $store.colorSchemeMode) {
+                ForEach(AppColorSchemeMode.allCases) { mode in
+                    Text(mode.displayName(language: store.interfaceLanguage)).tag(mode)
+                }
+            }
+
+            Text(strings.appearanceHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(20)
+        .frame(width: 380)
     }
 }
 

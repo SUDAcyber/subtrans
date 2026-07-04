@@ -60,6 +60,14 @@ struct AppStrings {
     var contextOverlap: String { choose("上下文", "Context") }
     var retryLimit: String { choose("失败重试", "Retries") }
     var previewLimit: String { choose("预览数量", "Preview Limit") }
+    var advancedSettings: String { choose("高级", "Advanced") }
+    var concurrentRequests: String { choose("并发请求", "Concurrency") }
+    var requestUnit: String { choose("路", "reqs") }
+    var contextAnalysisToggle: String { choose("翻译前分析剧情", "Analyze story before translating") }
+    var contextAnalysisHint: String {
+        choose("先用一次请求生成剧情摘要和术语表 注入每个批次 让并发翻译保持人名和语气一致",
+               "One extra request builds a plot summary and glossary shared by every batch, keeping names and tone consistent while batches run in parallel")
+    }
     var cueUnit: String { choose("条", "cues") }
     var characterUnit: String { choose("字", "chars") }
     var retryUnit: String { choose("次", "tries") }
@@ -112,6 +120,8 @@ struct AppStrings {
     var permanentlyDeleted: String { choose("已永久删除", "Deleted permanently") }
     var exported: String { choose("已导出", "Exported") }
     var noTranslatableSubtitles: String { choose("没有可翻译的字幕", "No subtitles to translate") }
+    var alreadyComplete: String { choose("译文已完整", "All cues already translated") }
+    var analyzingContext: String { choose("正在分析剧情与术语", "Analyzing story and terminology") }
     var startTranslating: String { choose("开始翻译", "Starting translation") }
     var translationComplete: String { choose("翻译完成", "Translation complete") }
     var finishedWithMissing: String { choose("完成但仍有缺失", "Finished with missing items") }
@@ -195,6 +205,15 @@ struct AppStrings {
 
     func translating(batch: Int, total: Int) -> String {
         choose("翻译第 \(batch)/\(total) 批", "Translating batch \(batch)/\(total)")
+    }
+
+    func translatingProgress(completed: Int, total: Int) -> String {
+        choose("已完成 \(completed)/\(total) 批", "Completed \(completed)/\(total) batches")
+    }
+
+    func finishedMissing(count: Int) -> String {
+        choose("完成 仍有 \(count) 条缺失 再次点击开始翻译可补翻",
+               "Finished with \(count) cues missing. Run translate again to fill them.")
     }
 
     func retrying(batch: Int, attempt: Int, totalAttempts: Int) -> String {

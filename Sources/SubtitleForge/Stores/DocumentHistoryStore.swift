@@ -23,9 +23,7 @@ enum DocumentHistoryStore {
                 at: url.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            let data = try encoder.encode(documents)
+            let data = try JSONEncoder().encode(documents)
             try data.write(to: url, options: .atomic)
         } catch {
             // History is a convenience cache. Translation/export should never fail because this write failed.

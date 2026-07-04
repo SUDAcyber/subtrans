@@ -10,10 +10,11 @@ final class AppStore {
     private let keychain = KeychainService()
     private let client: any SubtitleTranslationClient
     private var translationTask: Task<Void, Never>?
+    private var historySaveTask: Task<Void, Never>?
 
     var documents: [SubtitleDocument] = DocumentHistoryStore.load() {
         didSet {
-            DocumentHistoryStore.save(documents)
+            scheduleHistorySave()
         }
     }
     var selectedDocumentID: UUID? {
@@ -45,6 +46,7 @@ final class AppStore {
     var validation = ValidationReport()
     var errorMessage: String?
     var isInspectorPresented = true
+    var isFindReplacePresented = false
     var replacementSearchText = ""
     var replacementText = ""
     var replacementMatchCase = false
@@ -67,6 +69,17 @@ final class AppStore {
         self.selectedDocumentID = activeDocuments.first?.id ?? trashedDocuments.first?.id
         if let selectedDocument {
             self.validation = ValidationReport.make(cues: selectedDocument.cues)
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.historySaveTask?.cancel()
+                DocumentHistoryStore.save(self.documents)
+            }
         }
     }
 
@@ -431,16 +444,41 @@ final class AppStore {
         settings: TranslationSettings,
         apiKey: String
     ) async {
-        let batches = SRTChunker.makeBatches(
+        // Only untranslated cues are batched, so re-running translate after a
+        // partial failure fills in exactly the missing lines.
+        var batches = SRTChunker.makeBatches(
             cues: sourceCues,
             maxCueCount: settings.chunkCueLimit,
             maxSourceCharacters: settings.maxSourceCharacters,
-            contextOverlap: settings.contextOverlap
+            contextOverlap: settings.contextOverlap,
+            skipTranslated: true
         )
 
         guard !batches.isEmpty else {
-            progress = TranslationProgress(phase: .failed, message: strings.noTranslatableSubtitles)
+            let alreadyDone = sourceCues.contains(where: \.hasTranslation)
+            progress = alreadyDone
+                ? TranslationProgress(phase: .finished, message: strings.alreadyComplete)
+                : TranslationProgress(phase: .failed, message: strings.noTranslatableSubtitles)
             return
+        }
+
+        // One up-front whole-file analysis (plot summary + glossary) shared by all
+        // batches keeps names and tone consistent even though batches run in parallel.
+        if settings.useContextAnalysis {
+            progress = TranslationProgress(
+                phase: .translating,
+                currentBatch: 0,
+                totalBatches: batches.count,
+                message: strings.analyzingContext
+            )
+            let sample = Self.analysisSample(from: sourceCues)
+            if let summary = try? await client.analyzeContext(sourceText: sample, settings: settings, apiKey: apiKey) {
+                batches = batches.map { $0.withContextSummary(summary) }
+            }
+            if Task.isCancelled {
+                progress = TranslationProgress(phase: .cancelled, message: strings.stopped)
+                return
+            }
         }
 
         progress = TranslationProgress(
@@ -450,76 +488,185 @@ final class AppStore {
             message: strings.startTranslating
         )
 
+        let maxConcurrent = min(max(1, settings.maxConcurrentRequests), batches.count)
+        let clientRef = client
+        var completed = 0
+        var lastFailureMessage: String?
+
         do {
-            for batch in batches {
-                try Task.checkCancellation()
-                let translations = try await translateWithRetry(
-                    batch: batch,
-                    settings: settings,
-                    apiKey: apiKey
-                )
-                apply(translations: translations, to: documentID)
-                progress = TranslationProgress(
-                    phase: .validating,
-                    currentBatch: batch.batchNumber,
-                    totalBatches: batches.count,
-                    message: strings.validating(batch: batch.batchNumber, total: batches.count)
-                )
-                refreshValidation(for: documentID)
-                progress.phase = .translating
+            try await withThrowingTaskGroup(of: BatchOutcome.self) { group in
+                var nextIndex = 0
+                func enqueueNext(into group: inout ThrowingTaskGroup<BatchOutcome, Error>) {
+                    guard nextIndex < batches.count else { return }
+                    let batch = batches[nextIndex]
+                    nextIndex += 1
+                    group.addTask {
+                        try await Self.translateResilient(
+                            batch: batch,
+                            settings: settings,
+                            apiKey: apiKey,
+                            client: clientRef
+                        )
+                    }
+                }
+
+                for _ in 0..<maxConcurrent {
+                    enqueueNext(into: &group)
+                }
+
+                while let outcome = try await group.next() {
+                    enqueueNext(into: &group)
+                    apply(translations: outcome.translations, to: documentID)
+                    refreshValidation(for: documentID)
+                    completed += 1
+                    if let failure = outcome.errorDescription {
+                        lastFailureMessage = failure
+                    }
+                    progress = TranslationProgress(
+                        phase: .translating,
+                        currentBatch: completed,
+                        totalBatches: batches.count,
+                        message: strings.translatingProgress(completed: completed, total: batches.count)
+                    )
+                }
             }
 
             refreshValidation(for: documentID)
             markReviewWarnings(for: documentID, settings: settings)
-            var completionMessage = validation.isComplete ? strings.translationComplete : strings.finishedWithMissing
-            if validation.isComplete,
-               let index = documents.firstIndex(where: { $0.id == documentID }),
-               let url = try? writeVersionToSourceFolder(documentIndex: index) {
-                completionMessage = strings.completeGenerated(url.lastPathComponent)
+
+            if validation.isComplete {
+                var completionMessage = strings.translationComplete
+                if let index = documents.firstIndex(where: { $0.id == documentID }),
+                   let url = try? writeVersionToSourceFolder(documentIndex: index) {
+                    completionMessage = strings.completeGenerated(url.lastPathComponent)
+                }
+                progress = TranslationProgress(
+                    phase: .finished,
+                    currentBatch: batches.count,
+                    totalBatches: batches.count,
+                    message: completionMessage
+                )
+            } else {
+                progress = TranslationProgress(
+                    phase: .finished,
+                    currentBatch: batches.count,
+                    totalBatches: batches.count,
+                    message: strings.finishedMissing(count: validation.missingIDs.count)
+                )
+                if let lastFailureMessage {
+                    errorMessage = lastFailureMessage
+                }
             }
-            progress = TranslationProgress(
-                phase: .finished,
-                currentBatch: batches.count,
-                totalBatches: batches.count,
-                message: completionMessage
-            )
         } catch is CancellationError {
+            refreshValidation(for: documentID)
             progress = TranslationProgress(phase: .cancelled, message: strings.stopped)
         } catch {
+            refreshValidation(for: documentID)
             progress = TranslationProgress(phase: .failed, message: strings.failed)
             errorMessage = error.localizedDescription
         }
     }
 
-    private func translateWithRetry(
+    private struct BatchOutcome: Sendable {
+        var translations: [Int: String] = [:]
+        var errorDescription: String?
+    }
+
+    /// Translates one batch with layered fallbacks, mirroring the strategy used by
+    /// subtitle-translator-electron: accept partial results, re-request only the
+    /// missing IDs, and split the batch in half when the output is truncated or
+    /// malformed. Throws only on cancellation; other failures come back as an
+    /// outcome so sibling batches keep running.
+    private nonisolated static func translateResilient(
         batch: TranslationBatch,
         settings: TranslationSettings,
-        apiKey: String
-    ) async throws -> [Int: String] {
-        var lastError: Error?
-        let attempts = max(0, settings.retryLimit)
+        apiKey: String,
+        client: any SubtitleTranslationClient,
+        depth: Int = 0
+    ) async throws -> BatchOutcome {
+        var outcome = BatchOutcome()
+        var pending = batch.focusedCues
+        let attempts = max(1, settings.retryLimit + 1)
 
-        for attempt in 0...attempts {
+        for attempt in 0..<attempts {
+            try Task.checkCancellation()
             do {
-                progress = TranslationProgress(
-                    phase: .translating,
-                    currentBatch: batch.batchNumber - 1,
-                    totalBatches: batch.totalBatches,
-                    message: attempt == 0
-                        ? strings.translating(batch: batch.batchNumber, total: batch.totalBatches)
-                        : strings.retrying(batch: batch.batchNumber, attempt: attempt, totalAttempts: attempts)
-                )
-                return try await client.translate(batch: batch, settings: settings, apiKey: apiKey)
+                let request = attempt == 0 ? batch : batch.replacingFocusedCues(pending)
+                let result = try await client.translate(batch: request, settings: settings, apiKey: apiKey)
+                outcome.translations.merge(result.translations) { _, new in new }
+                pending = pending.filter { outcome.translations[$0.sequence] == nil }
+                if pending.isEmpty {
+                    outcome.errorDescription = nil
+                    return outcome
+                }
+                // Partial response: next attempt requests only the missing cues.
+                outcome.errorDescription = TranslationResultParserError
+                    .missingIDs(pending.map(\.sequence)).localizedDescription
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error as URLError where error.code == .cancelled {
+                throw CancellationError()
             } catch {
-                lastError = error
-                if attempt < attempts {
-                    let delay = UInt64(600_000_000) * UInt64(attempt + 1)
-                    try await Task.sleep(nanoseconds: delay)
+                let splittable: Bool
+                switch error {
+                case OpenAICompatibleClientError.truncatedResponse:
+                    splittable = true
+                case is TranslationResultParserError:
+                    splittable = true
+                default:
+                    splittable = false
+                }
+
+                if splittable, pending.count > 1, depth < 4 {
+                    let mid = pending.count / 2
+                    let left = batch.replacingFocusedCues(Array(pending[..<mid]))
+                    let right = batch.replacingFocusedCues(Array(pending[mid...]))
+                    async let leftOutcome = translateResilient(
+                        batch: left, settings: settings, apiKey: apiKey, client: client, depth: depth + 1
+                    )
+                    async let rightOutcome = translateResilient(
+                        batch: right, settings: settings, apiKey: apiKey, client: client, depth: depth + 1
+                    )
+                    let (l, r) = try await (leftOutcome, rightOutcome)
+                    outcome.translations.merge(l.translations) { _, new in new }
+                    outcome.translations.merge(r.translations) { _, new in new }
+                    outcome.errorDescription = l.errorDescription ?? r.errorDescription
+                    return outcome
+                }
+
+                outcome.errorDescription = error.localizedDescription
+                if attempt + 1 < attempts {
+                    try await Task.sleep(nanoseconds: 600_000_000 * UInt64(attempt + 1))
                 }
             }
         }
 
-        throw lastError ?? OpenAICompatibleClientError.emptyResponse
+        return outcome
+    }
+
+    private nonisolated static func analysisSample(from cues: [SubtitleCue], maxCharacters: Int = 12_000) -> String {
+        var lines: [String] = []
+        var total = 0
+        // Sample evenly across the whole file so the summary covers the full story arc.
+        let stride = max(1, cues.count * 40 / max(1, maxCharacters))
+        var index = 0
+        while index < cues.count, total < maxCharacters {
+            let text = cues[index].text
+            lines.append(text)
+            total += text.count + 1
+            index += stride
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func scheduleHistorySave() {
+        historySaveTask?.cancel()
+        let snapshot = documents
+        historySaveTask = Task.detached(priority: .utility) {
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            guard !Task.isCancelled else { return }
+            DocumentHistoryStore.save(snapshot)
+        }
     }
 
     private func apply(translations: [Int: String], to documentID: UUID) {

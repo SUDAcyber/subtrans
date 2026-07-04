@@ -52,10 +52,9 @@ struct InspectorView: View {
         switch selectedTab {
         case .model:
             tabScroll {
-                appearanceSection
                 providerSection
                 modelSection
-                chunkSection
+                advancedSection
             }
         case .memory:
             tabScroll {
@@ -75,30 +74,6 @@ struct InspectorView: View {
                 content()
             }
             .padding(18)
-        }
-    }
-
-    private var appearanceSection: some View {
-        let strings = store.strings
-
-        return SettingsGroup(title: strings.appearance) {
-            Picker(strings.appLanguage, selection: $store.interfaceLanguage) {
-                ForEach(AppLanguage.allCases) { language in
-                    Text(language.displayName).tag(language)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            Picker(strings.theme, selection: $store.colorSchemeMode) {
-                ForEach(AppColorSchemeMode.allCases) { mode in
-                    Text(mode.displayName(language: store.interfaceLanguage)).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            Text(strings.appearanceHint)
-                .font(.caption)
-                .foregroundStyle(AppTheme.mutedIvory)
         }
     }
 
@@ -167,19 +142,34 @@ struct InspectorView: View {
             }
 
             Toggle(strings.stripTargetPunctuation, isOn: $store.settings.stripTargetPunctuation)
+
+            Toggle(strings.contextAnalysisToggle, isOn: $store.settings.useContextAnalysis)
+
+            Text(strings.contextAnalysisHint)
+                .font(.caption)
+                .foregroundStyle(AppTheme.mutedIvory)
         }
     }
 
-    private var chunkSection: some View {
+    private var advancedSection: some View {
         let strings = store.strings
 
-        return SettingsGroup(title: strings.chunking) {
-            NumericSettingRow(title: strings.cueLimit, suffix: strings.cueUnit, value: $store.settings.chunkCueLimit, range: 1...500, step: 10)
-            NumericSettingRow(title: strings.characterLimit, suffix: strings.characterUnit, value: $store.settings.maxSourceCharacters, range: 500...50_000, step: 500)
-            NumericSettingRow(title: strings.contextOverlap, suffix: strings.cueUnit, value: $store.settings.contextOverlap, range: 0...50, step: 1)
-            NumericSettingRow(title: strings.retryLimit, suffix: strings.retryUnit, value: $store.settings.retryLimit, range: 0...10, step: 1)
-            NumericSettingRow(title: strings.previewLimit, suffix: strings.cueUnit, value: $store.previewCueLimit, range: 50...20_000, step: 100)
+        return DisclosureGroup {
+            VStack(alignment: .leading, spacing: 10) {
+                NumericSettingRow(title: strings.concurrentRequests, suffix: strings.requestUnit, value: $store.settings.maxConcurrentRequests, range: 1...10, step: 1)
+                NumericSettingRow(title: strings.cueLimit, suffix: strings.cueUnit, value: $store.settings.chunkCueLimit, range: 1...500, step: 4)
+                NumericSettingRow(title: strings.characterLimit, suffix: strings.characterUnit, value: $store.settings.maxSourceCharacters, range: 500...50_000, step: 500)
+                NumericSettingRow(title: strings.contextOverlap, suffix: strings.cueUnit, value: $store.settings.contextOverlap, range: 0...50, step: 1)
+                NumericSettingRow(title: strings.retryLimit, suffix: strings.retryUnit, value: $store.settings.retryLimit, range: 0...10, step: 1)
+                NumericSettingRow(title: strings.previewLimit, suffix: strings.cueUnit, value: $store.previewCueLimit, range: 50...20_000, step: 100)
+            }
+            .padding(.top, 8)
+        } label: {
+            Text(strings.advancedSettings)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.brass)
         }
+        .tint(AppTheme.brass)
     }
 
     private func targetLanguageText(strings: AppStrings) -> Binding<String> {

@@ -47,28 +47,14 @@ struct ContentView: View {
                 }
                 .help(strings.importSRT)
 
-                Picker(strings.targetLanguage, selection: $store.settings.targetLanguage) {
-                    ForEach(strings.targetLanguageOptions, id: \.value) { option in
-                        Text(option.label).tag(option.value)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(width: store.interfaceLanguage == .english ? 150 : 118)
-
-                TextField(strings.model, text: $store.settings.model)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 150)
-
-                Picker(selection: $store.colorSchemeMode) {
-                    ForEach(AppColorSchemeMode.allCases) { mode in
-                        Label(mode.displayName(language: store.interfaceLanguage), systemImage: mode.systemImage)
-                            .tag(mode)
-                    }
+                Button {
+                    store.isFindReplacePresented.toggle()
                 } label: {
-                    Label(strings.appearance, systemImage: store.colorSchemeMode.systemImage)
+                    Label(strings.findReplaceTranslation, systemImage: AppIconSymbol.search)
                 }
-                .pickerStyle(.menu)
-                .help(strings.switchAppearance)
+                .help(strings.findReplaceTranslation)
+                .keyboardShortcut("f", modifiers: [.command])
+                .disabled(store.selectedDocument == nil)
 
                 if store.isTranslating {
                     Button {
@@ -86,14 +72,6 @@ struct ContentView: View {
                     .help(strings.startTranslation)
                     .disabled(!store.canTranslate)
                 }
-
-                Button {
-                    store.exportSelectedWithPanel()
-                } label: {
-                    Label(strings.export, systemImage: AppIconSymbol.export)
-                }
-                .help(strings.exportSRT)
-                .disabled(store.selectedDocument == nil)
 
                 Button {
                     store.isInspectorPresented.toggle()

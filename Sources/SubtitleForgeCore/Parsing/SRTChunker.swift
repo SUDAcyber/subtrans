@@ -5,7 +5,8 @@ public enum SRTChunker {
         cues: [SubtitleCue],
         maxCueCount: Int,
         maxSourceCharacters: Int,
-        contextOverlap: Int
+        contextOverlap: Int,
+        skipTranslated: Bool = false
     ) -> [TranslationBatch] {
         guard !cues.isEmpty else { return [] }
 
@@ -13,38 +14,43 @@ public enum SRTChunker {
         let characterLimit = max(500, maxSourceCharacters)
         let overlap = max(0, contextOverlap)
 
-        var ranges: [Range<Int>] = []
-        var start = cues.startIndex
+        let pendingIndices = skipTranslated
+            ? cues.indices.filter { !cues[$0].hasTranslation }
+            : Array(cues.indices)
+        guard !pendingIndices.isEmpty else { return [] }
 
-        while start < cues.endIndex {
-            var end = start
-            var characterCount = 0
+        // Group pending cues into batches by count and character budget.
+        var groups: [[Int]] = []
+        var group: [Int] = []
+        var characterCount = 0
 
-            while end < cues.endIndex {
-                let cue = cues[end]
-                let cueCost = cue.text.count + cue.timecode.count + 24
-                let cueCount = end - start
-                let wouldExceedCount = cueCount >= cueLimit
-                let wouldExceedCharacters = characterCount + cueCost > characterLimit
+        for index in pendingIndices {
+            let cue = cues[index]
+            let cueCost = cue.text.count + cue.timecode.count + 24
+            let wouldExceedCount = group.count >= cueLimit
+            let wouldExceedCharacters = characterCount + cueCost > characterLimit
 
-                if end > start && (wouldExceedCount || wouldExceedCharacters) {
-                    break
-                }
-
-                characterCount += cueCost
-                end += 1
+            if !group.isEmpty && (wouldExceedCount || wouldExceedCharacters) {
+                groups.append(group)
+                group = []
+                characterCount = 0
             }
 
-            ranges.append(start..<end)
-            start = end
+            group.append(index)
+            characterCount += cueCost
+        }
+        if !group.isEmpty {
+            groups.append(group)
         }
 
-        return ranges.enumerated().map { offset, range in
-            let beforeStart = Swift.max(cues.startIndex, range.lowerBound - overlap)
-            let afterEnd = Swift.min(cues.endIndex, range.upperBound + overlap)
-            let focused = Array(cues[range])
-            let before = range.lowerBound > beforeStart ? Array(cues[beforeStart..<range.lowerBound]) : []
-            let after = afterEnd > range.upperBound ? Array(cues[range.upperBound..<afterEnd]) : []
+        return groups.enumerated().map { offset, indices in
+            let first = indices.first ?? cues.startIndex
+            let last = indices.last ?? first
+            let beforeStart = Swift.max(cues.startIndex, first - overlap)
+            let afterEnd = Swift.min(cues.endIndex, last + 1 + overlap)
+            let focused = indices.map { cues[$0] }
+            let before = first > beforeStart ? Array(cues[beforeStart..<first]) : []
+            let after = afterEnd > last + 1 ? Array(cues[(last + 1)..<afterEnd]) : []
             let sourceCharacterCount = focused.reduce(0) { total, cue in
                 total + cue.text.count + cue.timecode.count
             }
@@ -52,7 +58,7 @@ public enum SRTChunker {
             return TranslationBatch(
                 id: offset + 1,
                 batchNumber: offset + 1,
-                totalBatches: ranges.count,
+                totalBatches: groups.count,
                 focusedCues: focused,
                 contextBefore: before,
                 contextAfter: after,
