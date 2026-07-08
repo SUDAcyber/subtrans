@@ -23,6 +23,10 @@ public enum TranslationPromptBuilder {
         Return JSON only.
         The JSON schema is {"translations":[{"id":1,"text":"translated subtitle"}]}.
         Return exactly one item for every focused cue id.
+        Every item must have non-empty text. If a cue is only a filler sound (uh, um, ah),
+        music symbols, or otherwise needs no real translation, still return its id with a
+        minimal natural interjection in the target language (for Chinese use 嗯 or 啊),
+        or the original text unchanged. Never return empty text and never skip an id.
         Do not include markdown fences or extra commentary.
         Never change cue ids.
         """

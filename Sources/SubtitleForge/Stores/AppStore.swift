@@ -641,6 +641,23 @@ final class AppStore {
             }
         }
 
+        // Last resort for cues the model keeps skipping (filler words, symbols):
+        // request each one individually so it cannot be omitted from a larger batch.
+        if !pending.isEmpty, pending.count <= 16 {
+            for cue in pending {
+                try Task.checkCancellation()
+                let single = batch.replacingFocusedCues([cue])
+                if let result = try? await client.translate(batch: single, settings: settings, apiKey: apiKey),
+                   let text = result.translations[cue.sequence] {
+                    outcome.translations[cue.sequence] = text
+                }
+            }
+            pending = pending.filter { outcome.translations[$0.sequence] == nil }
+            outcome.errorDescription = pending.isEmpty
+                ? nil
+                : TranslationResultParserError.missingIDs(pending.map(\.sequence)).localizedDescription
+        }
+
         return outcome
     }
 

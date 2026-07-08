@@ -66,9 +66,13 @@ public enum TranslationResultParser {
         let expected = Set(expectedIDs)
         var translations: [Int: String] = [:]
         for item in items where expected.contains(item.id) {
-            let text = stripPunctuation
-                ? sanitizeSubtitleText(item.text)
-                : item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let raw = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            var text = stripPunctuation ? sanitizeSubtitleText(item.text) : raw
+            if text.isEmpty {
+                // Punctuation-only translations (e.g. "…") would vanish after
+                // sanitizing; keep the raw text rather than reporting the cue missing.
+                text = raw
+            }
             guard !text.isEmpty else { continue }
             translations[item.id] = text
         }
