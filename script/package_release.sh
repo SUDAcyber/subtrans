@@ -35,9 +35,25 @@ mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 
 swift build -c release
 BUILD_BINARY="$(swift build -c release --show-bin-path)/$APP_NAME"
+BUILD_BIN_DIR="$(dirname "$BUILD_BINARY")"
 
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+
+# SwiftPM resource bundles are not embedded when only the executable is copied.
+# Bundle.module needs these at runtime for the Typhoon installer and future assets.
+while IFS= read -r -d '' RESOURCE_BUNDLE; do
+  ditto "$RESOURCE_BUNDLE" "$APP_RESOURCES/$(basename "$RESOURCE_BUNDLE")"
+done < <(find "$BUILD_BIN_DIR" -maxdepth 1 -type d -name '*.bundle' -print0)
+
+if [[ -n "${BUNDLE_WHISPER_MODEL_DIR:-}" ]]; then
+  [[ -d "$BUNDLE_WHISPER_MODEL_DIR" ]] || {
+    echo "BUNDLE_WHISPER_MODEL_DIR is not a directory: $BUNDLE_WHISPER_MODEL_DIR" >&2
+    exit 2
+  }
+  mkdir -p "$APP_RESOURCES/WhisperModels"
+  ditto "$BUNDLE_WHISPER_MODEL_DIR" "$APP_RESOURCES/WhisperModels/$(basename "$BUNDLE_WHISPER_MODEL_DIR")"
+fi
 
 if [[ -f "$ICON_FILE" ]]; then
   cp "$ICON_FILE" "$APP_RESOURCES/AppIcon.icns"
@@ -76,9 +92,20 @@ PLIST
 
 plutil -lint "$INFO_PLIST" >/dev/null
 
-if command -v codesign >/dev/null 2>&1; then
-  codesign --force --deep --sign - --options runtime "$APP_BUNDLE"
-  codesign --verify --deep --strict "$APP_BUNDLE"
+SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+  codesign --force --deep --sign - --options runtime --timestamp=none "$APP_BUNDLE"
+else
+  codesign --force --deep --sign "$SIGN_IDENTITY" --options runtime --timestamp "$APP_BUNDLE"
+fi
+codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+  echo "WARNING: using ad-hoc signing; set CODE_SIGN_IDENTITY to a Developer ID Application identity for public distribution" >&2
+elif [[ -n "${NOTARY_PROFILE:-}" ]]; then
+  ditto -c -k --sequesterRsrc --keepParent "$APP_BUNDLE" "$ZIP_PATH"
+  xcrun notarytool submit "$ZIP_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
+  xcrun stapler staple "$APP_BUNDLE"
 fi
 
 ditto "$APP_BUNDLE" "$FINAL_APP"
@@ -88,6 +115,15 @@ mkdir -p "$DMG_STAGING"
 ditto "$FINAL_APP" "$DMG_STAGING/$DISPLAY_NAME.app"
 ln -s /Applications "$DMG_STAGING/Applications"
 hdiutil create -volname "$DISPLAY_NAME $VERSION" -srcfolder "$DMG_STAGING" -ov -format UDZO "$DMG_PATH"
+
+if [[ "$SIGN_IDENTITY" != "-" ]]; then
+  codesign --force --sign "$SIGN_IDENTITY" --timestamp "$DMG_PATH"
+  if [[ -n "${NOTARY_PROFILE:-}" ]]; then
+    xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun stapler staple "$DMG_PATH"
+    xcrun stapler validate "$DMG_PATH"
+  fi
+fi
 
 (cd "$DIST_DIR" && shasum -a 256 "$(basename "$ZIP_PATH")" "$(basename "$DMG_PATH")") >"$CHECKSUM_PATH"
 

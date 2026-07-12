@@ -139,9 +139,13 @@ struct AppStrings {
                "SCB10X's Thai-specialized model, ~19x faster than Whisper. Installed and ready. The audio-language option does not apply; Thai only.")
     }
     var typhoonNotInstalled: String {
-        choose("Typhoon ASR 尚未安装 需要本机 Python 环境支持 请联系开发者或运行安装脚本",
-               "Typhoon ASR is not installed. It needs a local Python environment; run the install script first.")
+        choose("Typhoon ASR 尚未安装 首次安装约需下载 2GB",
+               "Typhoon ASR is not installed. The first install downloads about 2GB.")
     }
+    var installTyphoon: String { choose("一键安装 Typhoon", "Install Typhoon") }
+    var typhoonInstallPreparing: String { choose("正在准备 Typhoon 安装", "Preparing Typhoon installation") }
+    var typhoonInstallComplete: String { choose("Typhoon ASR 安装完成", "Typhoon ASR installed") }
+    var typhoonInstallFailed: String { choose("Typhoon ASR 安装失败", "Typhoon ASR installation failed") }
     var scribeKey: String { choose("ElevenLabs 密钥", "ElevenLabs API Key") }
     var scribeHint: String {
         choose("云端识别 准确率更高 按量计费 音频会上传到 ElevenLabs",
@@ -152,12 +156,15 @@ struct AppStrings {
     var fillScribeKey: String { choose("请先在识别设置中填写 ElevenLabs 密钥", "Enter an ElevenLabs API key in Transcribe settings first") }
     var extractingAudio: String { choose("正在提取音轨", "Extracting audio") }
     var preparingModel: String { choose("正在准备识别模型 首次使用需下载", "Preparing model (first use downloads it)") }
+    func downloadingModel(percent: Int) -> String {
+        choose("正在下载 Whisper 模型 \(percent)%", "Downloading Whisper model \(percent)%")
+    }
     var uploadingAudio: String { choose("正在上传音频进行识别", "Uploading audio for transcription") }
     var transcriptionEmpty: String { choose("没有识别到任何语音", "No speech recognized") }
     var transcriptionFailed: String { choose("识别失败", "Transcription failed") }
     var transcriptionHint: String {
-        choose("导入视频或音频文件即可自动识别并翻译 支持 mp4 mov mp3 wav m4a 等",
-               "Import a video or audio file to transcribe and translate automatically. Supports mp4, mov, mp3, wav, m4a and more.")
+        choose("导入视频或音频文件即可自动识别并翻译 支持 mp4 mov mp3 wav m4a 等 MKV 需先转换",
+               "Import media to transcribe and translate automatically. MKV must be converted to MP4, M4A, or WAV first.")
     }
     var alreadyComplete: String { choose("译文已完整", "All cues already translated") }
     var analyzingContext: String { choose("正在分析剧情与术语", "Analyzing story and terminology") }

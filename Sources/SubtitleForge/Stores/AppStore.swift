@@ -12,6 +12,7 @@ final class AppStore {
     private let client: any SubtitleTranslationClient
     private var translationTask: Task<Void, Never>?
     private var transcriptionTask: Task<Void, Never>?
+    private var typhoonInstallTask: Task<Void, Never>?
     private var historySaveTask: Task<Void, Never>?
     /// Monotonic id for transcription runs. A cancelled run keeps executing until
     /// its next await; comparing against this id stops it from clobbering the
@@ -46,6 +47,8 @@ final class AppStore {
         }
     }
     var isTranscribing = false
+    var isInstallingTyphoon = false
+    var typhoonInstallStatus = ""
     var interfaceLanguage = UserPreferencesStore.loadInterfaceLanguage() {
         didSet {
             UserPreferencesStore.saveInterfaceLanguage(interfaceLanguage)
@@ -170,7 +173,7 @@ final class AppStore {
 
     func importWithPanel() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.srtSubtitle, .plainText, .movie, .mpeg4Movie, .quickTimeMovie, .audio, .mp3, .wav, .mpeg4Audio]
+        panel.allowedContentTypes = [.srtSubtitle, .plainText, .movie, .mpeg4Movie, .quickTimeMovie, .matroskaVideo, .audio, .mp3, .wav, .mpeg4Audio]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.prompt = strings.importAction
@@ -317,6 +320,30 @@ final class AppStore {
         }
     }
 
+    func installTyphoon() {
+        guard !isInstallingTyphoon else { return }
+        isInstallingTyphoon = true
+        typhoonInstallStatus = strings.typhoonInstallPreparing
+        typhoonInstallTask?.cancel()
+        typhoonInstallTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await TyphoonInstaller.install { [weak self] status in
+                    Task { @MainActor [weak self] in
+                        self?.typhoonInstallStatus = status
+                    }
+                }
+                self.typhoonInstallStatus = self.strings.typhoonInstallComplete
+            } catch is CancellationError {
+                self.typhoonInstallStatus = self.strings.stopped
+            } catch {
+                self.typhoonInstallStatus = self.strings.typhoonInstallFailed
+                self.errorMessage = error.localizedDescription
+            }
+            self.isInstallingTyphoon = false
+        }
+    }
+
     private func performTranscription(
         mediaURL: URL,
         settings: TranslationSettings,
@@ -357,6 +384,8 @@ final class AppStore {
                     switch update {
                     case .preparingModel:
                         self.progress.message = self.strings.preparingModel
+                    case let .downloadingModel(fraction):
+                        self.progress.message = self.strings.downloadingModel(percent: Int(fraction * 100))
                     case .uploading:
                         self.progress.message = self.strings.uploadingAudio
                     case let .transcribing(fraction):

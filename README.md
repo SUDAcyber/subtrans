@@ -79,10 +79,12 @@ swift test
 生成 macOS `.app`、`.zip` 和 `.dmg`：
 
 ```bash
-./script/package_release.sh 0.1.0
+./script/package_release.sh 0.3.0
 ```
 
-产物会输出到 `dist/release/`。如果本机没有 Developer ID 证书，脚本会使用 ad-hoc 签名，适合内部测试；正式对外发布前建议使用 Developer ID 签名并完成 Apple notarization。
+产物会输出到 `dist/release/`。如果本机没有 Developer ID 证书，脚本会使用 ad-hoc 签名，适合内部测试。正式发布时设置 `CODE_SIGN_IDENTITY` 和已保存的 `NOTARY_PROFILE`，脚本会自动签名、提交 Apple 公证并 staple 公证票据。
+
+可选设置 `BUNDLE_WHISPER_MODEL_DIR` 把一个已下载的 WhisperKit 模型目录嵌入 App；未嵌入时，应用会在首次使用时显示实时下载进度。Typhoon 安装器随 App 分发，可在识别设置中一键安装。
 
 ## 版本管理
 

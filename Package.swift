@@ -29,6 +29,9 @@ let package = Package(
                 "SubtitleForgeCore",
                 .product(name: "WhisperKit", package: "WhisperKit")
             ],
+            resources: [
+                .copy("Resources")
+            ],
             linkerSettings: [
                 .linkedFramework("Security")
             ]

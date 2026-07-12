@@ -3,12 +3,15 @@ import Foundation
 
 enum AudioExtractorError: LocalizedError {
     case noAudioTrack
+    case unsupportedMKV
     case exportFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .noAudioTrack:
             return "这个文件里没有音轨"
+        case .unsupportedMKV:
+            return "暂不支持 MKV 容器，因为 macOS AVFoundation 无法直接解析。请先用 ffmpeg 转为 MP4，或提取为 M4A/WAV 后再导入。"
         case let .exportFailed(reason):
             return "音轨提取失败：\(reason)"
         }
@@ -17,7 +20,7 @@ enum AudioExtractorError: LocalizedError {
 
 enum AudioExtractor {
     static let audioExtensions: Set<String> = ["mp3", "wav", "m4a", "aac", "flac", "aiff", "caf"]
-    static let videoExtensions: Set<String> = ["mp4", "mov", "m4v", "mpg", "mpeg", "ts"]
+    static let videoExtensions: Set<String> = ["mp4", "mov", "m4v", "mpg", "mpeg", "ts", "mkv"]
 
     static func isMediaFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
@@ -28,6 +31,9 @@ enum AudioExtractor {
     /// unchanged; video containers get their audio track exported to M4A.
     static func extractAudioIfNeeded(from url: URL) async throws -> URL {
         let ext = url.pathExtension.lowercased()
+        if ext == "mkv" {
+            throw AudioExtractorError.unsupportedMKV
+        }
         if audioExtensions.contains(ext) {
             return url
         }

@@ -7,9 +7,11 @@ import WhisperKit
 /// loaded model is cached so repeated runs skip the load cost.
 actor WhisperKitEngine {
     static let shared = WhisperKitEngine()
+    static let idleUnloadDelay: Duration = .seconds(600)
 
     private var pipeline: WhisperKit?
     private var loadedModel: String?
+    private var idleUnloadTask: Task<Void, Never>?
 
     var transcriptionFraction: Double {
         pipeline?.progress.fractionCompleted ?? 0
@@ -18,9 +20,12 @@ actor WhisperKitEngine {
     func transcribe(
         model: String,
         audioPath: String,
-        languageHint: String?
+        languageHint: String?,
+        onDownloadProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> [TranscribedSegment] {
-        let pipeline = try await loadPipeline(model: model)
+        idleUnloadTask?.cancel()
+        let pipeline = try await loadPipeline(model: model, onDownloadProgress: onDownloadProgress)
+        defer { scheduleIdleUnload() }
 
         var options = DecodingOptions()
         options.task = .transcribe
@@ -40,7 +45,7 @@ actor WhisperKitEngine {
             }
         )
 
-        return results
+        let segments = results
             .flatMap(\.segments)
             .map { segment in
                 TranscribedSegment(
@@ -49,25 +54,66 @@ actor WhisperKitEngine {
                     text: segment.text
                 )
             }
+        return segments
     }
 
-    private func loadPipeline(model: String) async throws -> WhisperKit {
+    private func loadPipeline(
+        model: String,
+        onDownloadProgress: @escaping @Sendable (Double) -> Void
+    ) async throws -> WhisperKit {
         if let pipeline, loadedModel == model {
             return pipeline
         }
+        if let pipeline {
+            await pipeline.unloadModels()
+        }
         pipeline = nil
         loadedModel = nil
+
+        let modelFolder: URL
+        if let bundled = Self.bundledModelFolder(named: model) {
+            modelFolder = bundled
+            onDownloadProgress(1)
+        } else {
+            modelFolder = try await WhisperKit.download(variant: model) { progress in
+                onDownloadProgress(progress.fractionCompleted)
+            }
+        }
         let config = WhisperKitConfig(
             model: model,
+            modelFolder: modelFolder.path,
             verbose: false,
             prewarm: true,
             load: true,
-            download: true
+            download: false
         )
         let created = try await WhisperKit(config)
         pipeline = created
         loadedModel = model
         return created
+    }
+
+    private static func bundledModelFolder(named model: String) -> URL? {
+        let candidates = [Bundle.main.resourceURL, Bundle.module.resourceURL]
+            .compactMap { $0?.appendingPathComponent("WhisperModels/\(model)", isDirectory: true) }
+        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    private func scheduleIdleUnload() {
+        idleUnloadTask?.cancel()
+        idleUnloadTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.idleUnloadDelay)
+            guard !Task.isCancelled else { return }
+            await self?.unloadPipeline()
+        }
+    }
+
+    private func unloadPipeline() async {
+        guard let pipeline else { return }
+        await pipeline.unloadModels()
+        pipeline.clearState()
+        self.pipeline = nil
+        loadedModel = nil
     }
 }
 
@@ -95,7 +141,10 @@ struct WhisperKitTranscriber: SubtitleTranscriber {
         return try await WhisperKitEngine.shared.transcribe(
             model: model,
             audioPath: audioURL.path,
-            languageHint: languageHint
+            languageHint: languageHint,
+            onDownloadProgress: { fraction in
+                onProgress(.downloadingModel(fraction: fraction))
+            }
         )
     }
 }

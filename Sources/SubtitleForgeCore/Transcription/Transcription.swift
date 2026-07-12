@@ -45,6 +45,7 @@ public struct TranscribedWord: Equatable, Sendable {
 
 public enum TranscriptionProgressUpdate: Sendable {
     case preparingModel
+    case downloadingModel(fraction: Double)
     case uploading
     case transcribing(fraction: Double)
 }

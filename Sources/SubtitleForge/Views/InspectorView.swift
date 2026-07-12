@@ -239,6 +239,24 @@ struct InspectorView: View {
                 Text(TyphoonTranscriber.isInstalled ? strings.typhoonHint : strings.typhoonNotInstalled)
                     .font(.caption)
                     .foregroundStyle(TyphoonTranscriber.isInstalled ? AppTheme.mutedIvory : AppTheme.warning)
+
+                if !TyphoonTranscriber.isInstalled {
+                    Button {
+                        store.installTyphoon()
+                    } label: {
+                        Label(strings.installTyphoon, systemImage: "arrow.down.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(store.isInstallingTyphoon)
+
+                    if store.isInstallingTyphoon {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(store.typhoonInstallStatus)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.mutedIvory)
+                    }
+                }
             } else {
                 SettingsField(title: strings.scribeKey) {
                     SecureField(strings.scribeKey, text: $store.scribeAPIKey)
