@@ -1,14 +1,73 @@
 # SUDA字幕翻译助手
 
-## 首次打开时 macOS 提示软件有风险或无法验证
+## 使用前必读：安装、模型下载与常见问题
 
-当前发布包没有 Apple Developer ID 签名和公证，macOS 可能显示“无法验证开发者”、“Apple 无法检查其是否包含恶意软件”或软件有风险的提示。请使用 Apple 官方允许的方式打开：
+### 1. macOS 提示软件有风险或无法验证
+
+当前发布包没有 Apple Developer ID 签名和公证，macOS 可能显示“无法验证开发者”、“Apple 无法检查其是否包含恶意软件”或软件有风险。请使用 Apple 官方允许的方式打开：
 
 1. 将 `SUDA字幕翻译助手.app` 拖入“应用程序”文件夹。
-2. 在 Finder 中找到该 App，按住 Control 点击或右键点击，选择“打开”，再次点击“打开”。
-3. 如果仍被阻止，打开“系统设置 → 隐私与安全性”，滚动到“安全性”，在该 App 的提示旁点击“仍要打开”，然后使用 Touch ID 或管理员密码确认。
+2. 在 Finder 中按住 Control 点击或右键点击 App，选择“打开”，再次点击“打开”。
+3. 如果仍被阻止，打开“系统设置 → 隐私与安全性”，滚动到“安全性”，在该 App 的提示旁点击“仍要打开”，使用 Touch ID 或管理员密码确认。
 
-不建议关闭 Gatekeeper 或修改全局安全设置。下载后可使用 Release 中的 SHA-256 校验文件确认 DMG 完整性。
+不需要也不建议关闭 Gatekeeper。下载后可使用 Release 附带的 `checksums.txt` 校验 DMG 的 SHA-256。
+
+### 2. 系统、网络和磁盘要求
+
+| 项目 | 要求或注意事项 |
+| --- | --- |
+| macOS | macOS 14.0 或更高版本 |
+| 网络 | 首次安装 Typhoon、首次使用 WhisperKit、云端识别及 AI 翻译都需要网络 |
+| Typhoon 空间 | 首次安装约需 2GB，依赖与 Python 环境保存在用户目录 |
+| Whisper 空间 | 按选择的模型下载，`large-v3` 约 3.1GB；模型越大，首次下载和 Core ML 预热越慢 |
+| 内存 | `large-v3` 识别时可占用约 2–3GB；任务结束并空闲 10 分钟后应用会卸载 pipeline |
+
+Release 为了控制体积，不内置 Typhoon 或 Whisper 大模型；应用与安装器在 DMG 中，模型按需下载。
+
+### 3. Typhoon ASR 本地泰语识别
+
+- 用途：泰语本地识别，当前固定使用准确率优先的 Beam Search 4，速度会比原始 greedy 模式慢。
+- 模型页：[Typhoon ASR Realtime](https://huggingface.co/typhoon-ai/typhoon-asr-realtime)
+- 安装工具：[uv Releases](https://github.com/astral-sh/uv/releases/latest)
+- 安装方式：在“设置 → 语音识别 → Typhoon ASR”中点击“一键安装 Typhoon”。
+- 本地目录：`~/Library/Application Support/SUDA字幕翻译助手/typhoon/`
+- 密钥要求：不需要 `.env`、API Key 或 Hugging Face Token；模型与安装器均为公开下载。
+- 安装失败：先确认 GitHub 和 Hugging Face 可访问、磁盘空间足够，然后重试一键安装。如安装曾中断，可退出 App，删除上述 `typhoon` 目录后重新安装。
+- 准确率注意：背景音乐、多人抢话、强口音和过低音量仍会导致错识；可用 WhisperKit `large-v3` 或 ElevenLabs Scribe 交叉对比。
+
+### 4. WhisperKit 本地多语识别
+
+- 模型仓库：[Argmax WhisperKit Core ML Models](https://huggingface.co/argmaxinc/whisperkit-coreml)
+- 下载方式：在识别设置选择模型后导入音视频，首次使用会自动下载并显示进度。
+- 密钥要求：公开模型不需要 `.env` 或 Hugging Face Token。
+- 下载卡住：检查 Hugging Face 连接和磁盘空间；再次导入时 WhisperKit 会复用已完成的缓存。内存紧张时可选择 `small` 或 `medium`。
+- 停止任务：点击“停止”会把取消状态传递到 Whisper 解码任务。
+
+### 5. ElevenLabs Scribe 云端识别
+
+- 官方文档：[ElevenLabs Speech to Text](https://elevenlabs.io/docs/capabilities/speech-to-text)
+- 需要 ElevenLabs API Key，在 App 的识别设置中填写，密钥保存在 macOS Keychain，不会写入项目、DMG 或 `.env`。
+- 音频会上传到 ElevenLabs 服务器并按其账户规则计费；不希望上传音频时请使用 Typhoon 或 WhisperKit。
+- 大文件使用磁盘 multipart 流式上传，不会在内存中复制两份完整音频。
+
+### 6. AI 翻译接口、密钥与数据
+
+- 默认使用 AIHubMix 的 OpenAI 兼容接口，也可切换 OpenAI 或其他兼容 `/v1/chat/completions` / `/v1/responses` 的服务。
+- API Key 仅保存在 macOS Keychain；项目源码、Release、DMG 和默认设置都不包含真实密钥。
+- 字幕原文、剧情分析样本和翻译记忆会按所选接口发送到对应模型服务；如果内容敏感，请先确认服务商的隐私政策。
+- Release 不预置任何个人翻译记忆。用户自行添加的记忆仅保存在本机偏好设置中。
+
+### 7. 导入格式、MKV 与批量处理
+
+- 支持 SRT 以及常见的 MP4、MOV、M4V、MP3、WAV、M4A、AAC、FLAC、AIFF、CAF 等音视频文件。AVI、OGG 等会按 macOS UTType 能力尝试进入媒体处理。
+- MKV 不受 macOS AVFoundation 直接支持；请先用 ffmpeg 转为 MP4，或提取为 M4A/WAV 后导入。
+- 多选时 SRT 会全部导入，媒体文件按队列依次识别和翻译。点击“停止”会取消当前任务并清空待处理队列。
+
+### 8. 字幕导出与查找
+
+- “导出原字幕”只导出识别原文和原始时间轴，不包含译文。
+- “生成字幕/另存为”优先导出译文。
+- 查找替换中的“定位下一处”会循环跳转、自动滚动并高亮匹配字幕。
 
 SUDA字幕翻译助手是一个 macOS 字幕翻译工具，英文界面名为 SUDATranslator。软件默认使用中文界面和 AIHubMix 的 OpenAI 兼容接口，也可以切换到英文界面，或切换到任意兼容 `/v1/chat/completions` 或 `/v1/responses` 的大模型服务。
 
