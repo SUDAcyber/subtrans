@@ -229,23 +229,75 @@ struct TyphoonTranscriber: SubtitleTranscriber {
     SR = 16000
     MAX_LEN = 6.0      # seconds per subtitle cue cap
     SPLIT_GAP = 0.45   # any silence longer than this starts a new cue
-    MIN_LEN = 0.25     # drop blips shorter than this
-    PAD = 0.12         # context padding around each chunk
+    MIN_LEN = 0.60     # very short clips lose Thai co-articulation context
+    PAD = 0.22         # preserve consonants around VAD boundaries
+    FRAME = 480        # 30 ms VAD window; avoids smearing short dialogue gaps
+    HOP = 160          # 10 ms boundary resolution
+    TOP_DB = 28        # stricter than the old 35 dB threshold around background audio
 
     def hyp_text(h):
         return h.text if hasattr(h, "text") else str(h)
 
+    def quiet_cut(y, start, latest):
+        """Choose the lowest-energy 120 ms valley before the hard length cap."""
+        lo = max(0, int(start * SR))
+        hi = min(len(y), int(latest * SR))
+        window = max(1, int(0.12 * SR))
+        if hi - lo <= window:
+            return latest
+        energy = np.convolve(y[lo:hi] ** 2, np.ones(window) / window, mode="valid")
+        # Do not create a tiny tail: search only after the first half of the cue.
+        search_start = min(len(energy) - 1, int(0.5 * (hi - lo)))
+        index = search_start + int(np.argmin(energy[search_start:]))
+        return (lo + index + window // 2) / SR
+
+    def enforce_max_length(y, chunks):
+        final = []
+        for original_start, original_end in chunks:
+            start = original_start
+            while original_end - start > MAX_LEN:
+                cut = quiet_cut(y, start, start + MAX_LEN)
+                # Safety bounds keep both sides useful even on uniform audio.
+                cut = min(start + MAX_LEN, max(start + MIN_LEN, cut))
+                final.append([start, cut])
+                start = cut
+            if original_end - start >= MIN_LEN:
+                final.append([start, original_end])
+        return final
+
     def main():
         audio_path = sys.argv[1]
-        model_name = sys.argv[2] if len(sys.argv) > 2 else "scb10x/typhoon-asr-realtime"
+        model_name = "scb10x/typhoon-asr-realtime"
 
         print("PHASE loading", file=sys.stderr, flush=True)
         model = nemo_asr.models.ASRModel.from_pretrained(model_name=model_name, map_location="cpu")
 
+        # Accuracy-first is the only Typhoon mode: it is more robust for Thai
+        # homophones and continuous dialogue than the realtime greedy decoder.
+        decoding = model.cfg.decoding.copy()
+        decoding.strategy = "beam"
+        decoding.beam.beam_size = 4
+        decoding.beam.return_best_hypothesis = True
+        decoding.beam.score_norm = True
+        model.change_decoding_strategy(decoding)
+
         y, _ = librosa.load(audio_path, sr=SR, mono=True)
+        # Normalize once for the whole recording with a capped gain. The previous
+        # per-cue peak normalization amplified room tone and music in quiet clips.
+        peak = float(np.max(np.abs(y))) if len(y) else 0.0
+        if peak > 1e-4:
+            y = y * min(4.0, 0.95 / peak)
         duration = len(y) / SR
 
-        intervals = librosa.effects.split(y, top_db=35, frame_length=2048, hop_length=512)
+        # Short analysis windows preserve the 0.45 s pauses visible in dialogue
+        # waveforms. The old 128 ms window plus 35 dB threshold often treated
+        # room tone or background music as speech and merged neighboring lines.
+        intervals = librosa.effects.split(
+            y,
+            top_db=TOP_DB,
+            frame_length=FRAME,
+            hop_length=HOP
+        )
 
         # Prefer breaking cues at real silences: only bridge tiny gaps, and never
         # let a cue grow past MAX_LEN even mid-speech (hard split as last resort).
@@ -257,13 +309,7 @@ struct TyphoonTranscriber: SubtitleTranscriber {
             else:
                 chunks.append([s, e])
 
-        final = []
-        for s, e in chunks:
-            while e - s > MAX_LEN:
-                final.append([s, s + MAX_LEN])
-                s += MAX_LEN
-            if e - s >= MIN_LEN:
-                final.append([s, e])
+        final = enforce_max_length(y, chunks)
 
         if not final:
             print(json.dumps({"segments": []}, ensure_ascii=False))
@@ -274,9 +320,8 @@ struct TyphoonTranscriber: SubtitleTranscriber {
         for i, (s, e) in enumerate(final):
             s2, e2 = max(0, s - PAD), min(duration, e + PAD)
             seg = y[int(s2 * SR):int(e2 * SR)]
-            peak = float(np.max(np.abs(seg))) + 1e-8
             path = os.path.join(tmpdir, f"c{i}.wav")
-            sf.write(path, seg / peak, SR)
+            sf.write(path, seg, SR)
             paths.append(path)
 
         print(f"PHASE transcribing {len(paths)}", file=sys.stderr, flush=True)

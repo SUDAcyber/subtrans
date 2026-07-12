@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import UniformTypeIdentifiers
 
 enum AudioExtractorError: LocalizedError {
     case noAudioTrack
@@ -24,7 +25,13 @@ enum AudioExtractor {
 
     static func isMediaFile(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
-        return audioExtensions.contains(ext) || videoExtensions.contains(ext)
+        if audioExtensions.contains(ext) || videoExtensions.contains(ext) {
+            return true
+        }
+        guard let type = UTType(filenameExtension: ext) else { return false }
+        return type.conforms(to: .audio)
+            || type.conforms(to: .movie)
+            || type.conforms(to: .audiovisualContent)
     }
 
     /// Returns a local audio file for the given media URL. Audio files pass through

@@ -12,6 +12,7 @@ final class AppStore {
     private let client: any SubtitleTranslationClient
     private var translationTask: Task<Void, Never>?
     private var transcriptionTask: Task<Void, Never>?
+    private var pendingMediaURLs: [URL] = []
     private var typhoonInstallTask: Task<Void, Never>?
     private var historySaveTask: Task<Void, Never>?
     /// Monotonic id for transcription runs. A cancelled run keeps executing until
@@ -26,6 +27,7 @@ final class AppStore {
     }
     var selectedDocumentID: UUID? {
         didSet {
+            replacementLocatedCueSequence = nil
             if let selectedDocument {
                 validation = ValidationReport.make(cues: selectedDocument.cues)
             }
@@ -34,6 +36,7 @@ final class AppStore {
     var settings = UserPreferencesStore.loadSettings() {
         didSet {
             UserPreferencesStore.saveSettings(settings)
+            startNextMediaIfPossible()
         }
     }
     var apiKey = "" {
@@ -44,6 +47,7 @@ final class AppStore {
     var scribeAPIKey = "" {
         didSet {
             scribeKeychain.saveAPIKey(scribeAPIKey)
+            startNextMediaIfPossible()
         }
     }
     var isTranscribing = false
@@ -63,9 +67,14 @@ final class AppStore {
     var isInspectorPresented = true
     var isFindReplacePresented = false
     var showReviewCuesOnly = false
-    var replacementSearchText = ""
+    var replacementSearchText = "" {
+        didSet { replacementLocatedCueSequence = nil }
+    }
     var replacementText = ""
-    var replacementMatchCase = false
+    var replacementMatchCase = false {
+        didSet { replacementLocatedCueSequence = nil }
+    }
+    var replacementLocatedCueSequence: Int?
     var previewCueLimit = UserPreferencesStore.loadPreviewCueLimit() {
         didSet {
             UserPreferencesStore.savePreviewCueLimit(previewCueLimit)
@@ -180,10 +189,15 @@ final class AppStore {
         panel.message = strings.selectSubtitleFiles
 
         guard panel.runModal() == .OK else { return }
+        var mediaURLs: [URL] = []
         for url in panel.urls {
             if AudioExtractor.isMediaFile(url) {
-                transcribeMedia(url: url)
-                break // one transcription at a time
+                mediaURLs.append(url)
+                continue
+            }
+            guard url.pathExtension.lowercased() == "srt" else {
+                errorMessage = strings.unsupportedImportType(url.pathExtension)
+                continue
             }
             do {
                 try importFile(url: url)
@@ -191,6 +205,7 @@ final class AppStore {
                 errorMessage = error.localizedDescription
             }
         }
+        enqueueMediaFiles(mediaURLs)
     }
 
     func importFile(url: URL) throws {
@@ -232,7 +247,7 @@ final class AppStore {
                         return
                     }
                     if AudioExtractor.isMediaFile(url) {
-                        self.transcribeMedia(url: url)
+                        self.enqueueMediaFiles([url])
                         return
                     }
                     guard url.pathExtension.lowercased() == "srt" else {
@@ -284,23 +299,36 @@ final class AppStore {
         translationTask = nil
         transcriptionTask?.cancel()
         transcriptionTask = nil
+        pendingMediaURLs.removeAll()
         transcriptionRunID += 1
         isTranscribing = false
         progress = TranslationProgress(phase: .cancelled, message: strings.stopped)
     }
 
     func transcribeMedia(url: URL) {
-        guard !isBusy else { return }
+        enqueueMediaFiles([url])
+    }
+
+    private func enqueueMediaFiles(_ urls: [URL]) {
+        pendingMediaURLs.append(contentsOf: urls)
+        startNextMediaIfPossible()
+    }
+
+    private func startNextMediaIfPossible() {
+        guard !isBusy, !pendingMediaURLs.isEmpty else { return }
+        let url = pendingMediaURLs.removeFirst()
         let settingsSnapshot = settings
         if settingsSnapshot.transcriptionEngine == .scribe,
            scribeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             errorMessage = strings.fillScribeKey
             isInspectorPresented = true
+            pendingMediaURLs.insert(url, at: 0)
             return
         }
         if settingsSnapshot.transcriptionEngine == .typhoon, !TyphoonTranscriber.isInstalled {
             errorMessage = strings.typhoonNotInstalled
             isInspectorPresented = true
+            pendingMediaURLs.insert(url, at: 0)
             return
         }
 
@@ -334,6 +362,7 @@ final class AppStore {
                     }
                 }
                 self.typhoonInstallStatus = self.strings.typhoonInstallComplete
+                self.startNextMediaIfPossible()
             } catch is CancellationError {
                 self.typhoonInstallStatus = self.strings.stopped
             } catch {
@@ -353,6 +382,10 @@ final class AppStore {
         defer {
             if runID == transcriptionRunID {
                 isTranscribing = false
+                transcriptionTask = nil
+                if !isTranslating {
+                    startNextMediaIfPossible()
+                }
             }
         }
         do {
@@ -513,6 +546,34 @@ final class AppStore {
         errorMessage = strings.noTranslationMatch
     }
 
+    func locateNextTranslationMatch() {
+        guard let document = selectedDocument else {
+            errorMessage = strings.importFileFirst
+            return
+        }
+        let needle = replacementSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else {
+            errorMessage = strings.enterSearchText
+            return
+        }
+        let options: String.CompareOptions = replacementMatchCase ? [] : [.caseInsensitive]
+        let matches = document.cues.filter { cue in
+            cue.translation?.range(of: needle, options: options) != nil
+        }
+        guard !matches.isEmpty else {
+            replacementLocatedCueSequence = nil
+            errorMessage = strings.noTranslationMatch
+            return
+        }
+
+        let next = matches.first { cue in
+            guard let current = replacementLocatedCueSequence else { return true }
+            return cue.sequence > current
+        } ?? matches[0]
+        showReviewCuesOnly = false
+        replacementLocatedCueSequence = next.sequence
+    }
+
     func replaceAllTranslationMatches() {
         guard let documentIndex = selectedDocumentIndex else {
             errorMessage = strings.importFileFirst
@@ -600,6 +661,26 @@ final class AppStore {
         }
     }
 
+    func exportSourceSubtitleWithPanel() {
+        guard let document = selectedDocument, !document.isDeleted else {
+            errorMessage = strings.noExportableSubtitle
+            return
+        }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.srtSubtitle]
+        panel.nameFieldStringValue = "\(document.name)-\(strings.sourceSubtitleFilenameSuffix).srt"
+        panel.prompt = strings.export
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let text = SRTParser.render(document.cues, preferTranslations: false)
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            progress = TranslationProgress(phase: .finished, message: strings.sourceSubtitleExported)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func exportSelectedToSourceFolder() {
         guard let index = selectedDocumentIndex else {
             errorMessage = strings.noExportableSubtitle
@@ -621,6 +702,10 @@ final class AppStore {
         settings: TranslationSettings,
         apiKey: String
     ) async {
+        defer {
+            translationTask = nil
+            startNextMediaIfPossible()
+        }
         // Only untranslated cues are batched, so re-running translate after a
         // partial failure fills in exactly the missing lines.
         var batches = SRTChunker.makeBatches(
