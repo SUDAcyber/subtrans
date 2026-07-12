@@ -26,8 +26,8 @@ struct AppStrings {
     var showHideSettings: String { choose("显示或隐藏设置", "Show or hide settings") }
     var alertTitle: String { choose("需要处理一下", "Needs Attention") }
     var ok: String { choose("知道了", "OK") }
-    var dropToImport: String { choose("松开以导入 SRT", "Release to Import SRT") }
-    var dropMultipleFiles: String { choose("支持一次拖入多个字幕文件", "Drop one or more subtitle files") }
+    var dropToImport: String { choose("松开以导入字幕或音视频", "Release to import subtitles or media") }
+    var dropMultipleFiles: String { choose("支持 SRT 字幕以及 mp4 mov mp3 wav 等音视频文件", "Supports SRT subtitles and mp4, mov, mp3, wav media files") }
     var subtitleMenu: String { choose("字幕", "Subtitles") }
     var history: String { choose("历史记录", "History") }
     var trash: String { choose("回收箱", "Trash") }
@@ -52,6 +52,10 @@ struct AppStrings {
     var endpointMode: String { choose("接口模式", "Endpoint") }
     var customTargetLanguage: String { choose("自定义目标语言", "Custom Target Language") }
     var reasoningEffort: String { choose("推理深度", "Reasoning") }
+    var lunaChatHint: String {
+        choose("gpt-5.6-luna 在聊天补全接口通过模型变体控制推理深度 低=luna-low 中和高=luna-high 模型默认=不推理 应用会自动切换",
+               "On chat completions, gpt-5.6-luna selects reasoning via model variants: low = luna-low, medium/high = luna-high, default = no reasoning. Handled automatically.")
+    }
     var textVerbosity: String { choose("输出长度", "Verbosity") }
     var stripTargetPunctuation: String { choose("移除目标标点", "Remove target punctuation") }
     var chunking: String { choose("分段", "Chunking") }
@@ -76,9 +80,9 @@ struct AppStrings {
     var sourceOrName: String { choose("原文或名字", "Source or Name") }
     var fixedTranslation: String { choose("固定译法", "Fixed Translation") }
     var note: String { choose("备注", "Note") }
-    var sourcePlaceholder: String { choose("例如 Ko Song 或 เซิร์ฟ", "e.g. Ko Song or เซิร์ฟ") }
-    var targetPlaceholder: String { choose("例如 Ko Song 或 Surf", "e.g. Ko Song or Surf") }
-    var notePlaceholder: String { choose("例如 泰语人名", "e.g. Thai proper name") }
+    var sourcePlaceholder: String { choose("输入原文专名或术语", "Enter a source name or term") }
+    var targetPlaceholder: String { choose("输入目标语固定译法", "Enter the fixed target translation") }
+    var notePlaceholder: String { choose("可选备注", "Optional note") }
     var addMemory: String { choose("加入记忆", "Add to Memory") }
     var restorePreset: String { choose("恢复预置", "Restore Presets") }
     var translationPrompt: String { choose("翻译指令", "Translation Prompt") }
@@ -120,6 +124,48 @@ struct AppStrings {
     var permanentlyDeleted: String { choose("已永久删除", "Deleted permanently") }
     var exported: String { choose("已导出", "Exported") }
     var noTranslatableSubtitles: String { choose("没有可翻译的字幕", "No subtitles to translate") }
+    var transcriptionTab: String { choose("语音识别", "Transcribe") }
+    var transcriptionEngine: String { choose("识别引擎", "Engine") }
+    var whisperLocalEngine: String { choose("WhisperKit 本地", "WhisperKit (local)") }
+    var scribeCloudEngine: String { choose("ElevenLabs Scribe 云端", "ElevenLabs Scribe (cloud)") }
+    var whisperModelName: String { choose("Whisper 模型", "Whisper Model") }
+    var whisperModelHint: String {
+        choose("首次使用会自动下载模型 large-v3 约 1GB 准确率最高 small 最快",
+               "Models download automatically on first use. large-v3 (~1GB) is the most accurate; small is the fastest.")
+    }
+    var typhoonEngine: String { choose("Typhoon ASR 本地 泰语专用", "Typhoon ASR (local, Thai)") }
+    var typhoonHint: String {
+        choose("SCB10X 泰语专用模型 速度比 Whisper 快约 19 倍 已安装可直接使用 音频语言选项对此引擎无效 仅识别泰语",
+               "SCB10X's Thai-specialized model, ~19x faster than Whisper. Installed and ready. The audio-language option does not apply; Thai only.")
+    }
+    var typhoonNotInstalled: String {
+        choose("Typhoon ASR 尚未安装 首次安装约需下载 2GB",
+               "Typhoon ASR is not installed. The first install downloads about 2GB.")
+    }
+    var installTyphoon: String { choose("一键安装 Typhoon", "Install Typhoon") }
+    var typhoonInstallPreparing: String { choose("正在准备 Typhoon 安装", "Preparing Typhoon installation") }
+    var typhoonInstallComplete: String { choose("Typhoon ASR 安装完成", "Typhoon ASR installed") }
+    var typhoonInstallFailed: String { choose("Typhoon ASR 安装失败", "Typhoon ASR installation failed") }
+    var scribeKey: String { choose("ElevenLabs 密钥", "ElevenLabs API Key") }
+    var scribeHint: String {
+        choose("云端识别 准确率更高 按量计费 音频会上传到 ElevenLabs",
+               "Cloud transcription with top accuracy. Usage-billed; audio is uploaded to ElevenLabs.")
+    }
+    var spokenLanguage: String { choose("音频语言", "Audio Language") }
+    var autoDetectLanguage: String { choose("自动检测", "Auto Detect") }
+    var fillScribeKey: String { choose("请先在识别设置中填写 ElevenLabs 密钥", "Enter an ElevenLabs API key in Transcribe settings first") }
+    var extractingAudio: String { choose("正在提取音轨", "Extracting audio") }
+    var preparingModel: String { choose("正在准备识别模型 首次使用需下载", "Preparing model (first use downloads it)") }
+    func downloadingModel(percent: Int) -> String {
+        choose("正在下载 Whisper 模型 \(percent)%", "Downloading Whisper model \(percent)%")
+    }
+    var uploadingAudio: String { choose("正在上传音频进行识别", "Uploading audio for transcription") }
+    var transcriptionEmpty: String { choose("没有识别到任何语音", "No speech recognized") }
+    var transcriptionFailed: String { choose("识别失败", "Transcription failed") }
+    var transcriptionHint: String {
+        choose("导入视频或音频文件即可自动识别并翻译 支持 mp4 mov mp3 wav m4a 等 MKV 需先转换",
+               "Import media to transcribe and translate automatically. MKV must be converted to MP4, M4A, or WAV first.")
+    }
     var alreadyComplete: String { choose("译文已完整", "All cues already translated") }
     var analyzingContext: String { choose("正在分析剧情与术语", "Analyzing story and terminology") }
     var startTranslating: String { choose("开始翻译", "Starting translation") }
@@ -175,7 +221,15 @@ struct AppStrings {
     }
 
     func reviewWarnings(_ count: Int) -> String {
-        choose("有 \(count) 条疑似人名需要检查", "\(count) possible names need review")
+        choose("有 \(count) 条疑似人名需要检查 点击查看", "\(count) possible names need review. Click to view")
+    }
+
+    func showingReviewOnly(_ count: Int) -> String {
+        choose("仅显示 \(count) 条待检查 点击恢复全部", "Showing \(count) flagged cues. Click to show all")
+    }
+
+    var toggleReviewFilter: String {
+        choose("筛选疑似人名字幕", "Filter flagged cues")
     }
 
     func matchCount(_ count: Int) -> String {
@@ -209,6 +263,14 @@ struct AppStrings {
 
     func translatingProgress(completed: Int, total: Int) -> String {
         choose("已完成 \(completed)/\(total) 批", "Completed \(completed)/\(total) batches")
+    }
+
+    func transcribing(percent: Int) -> String {
+        choose("正在识别语音 \(percent)%", "Transcribing \(percent)%")
+    }
+
+    func transcribed(count: Int) -> String {
+        choose("识别完成 共 \(count) 条", "Transcribed \(count) cues")
     }
 
     func finishedMissing(count: Int) -> String {

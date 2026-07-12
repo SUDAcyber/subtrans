@@ -29,4 +29,5 @@ enum AppIconSymbol {
     static let promptValidation = "checkmark.shield"
     static let clear = "trash.slash"
     static let remove = "minus.circle.fill"
+    static let transcribe = "waveform"
 }

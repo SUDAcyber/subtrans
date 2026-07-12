@@ -5,14 +5,14 @@ final class TranslationPromptBuilderTests: XCTestCase {
     func testSystemPromptIncludesMemoryAndProperNameProtection() {
         var settings = TranslationSettings.aiHubMixDefault
         settings.translationMemory = [
-            TranslationMemoryEntry(source: "Ko Song", target: "Ko Song", note: "人名"),
-            TranslationMemoryEntry(source: "เซิร์ฟ", target: "Surf", note: "泰语人名")
+            TranslationMemoryEntry(source: "Source Name A", target: "Target Name A", note: "test fixture"),
+            TranslationMemoryEntry(source: "Source Term B", target: "Target Term B", note: "test fixture")
         ]
 
         let prompt = TranslationPromptBuilder.systemPrompt(settings: settings)
-        XCTAssertTrue(prompt.contains("Ko Song => Ko Song"))
-        XCTAssertTrue(prompt.contains("เซิร์ฟ => Surf"))
+        XCTAssertTrue(prompt.contains("Source Name A => Target Name A"))
+        XCTAssertTrue(prompt.contains("Source Term B => Target Term B"))
         XCTAssertTrue(prompt.contains("Never translate the literal meaning of romanized personal names"))
-        XCTAssertTrue(prompt.contains("不能翻译成二哥"))
+        XCTAssertTrue(prompt.contains("不要按字面意思翻译"))
     }
 }

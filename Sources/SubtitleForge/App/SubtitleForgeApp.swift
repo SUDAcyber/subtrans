@@ -32,7 +32,7 @@ struct SubtitleForgeApp: App {
                     store.cancelTranslation()
                 }
                 .keyboardShortcut(".", modifiers: [.command])
-                .disabled(!store.isTranslating)
+                .disabled(!store.isBusy)
 
                 Divider()
 

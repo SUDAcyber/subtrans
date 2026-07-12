@@ -3,7 +3,14 @@ import Security
 
 struct KeychainService: Sendable {
     private let service = "com.subtitleforge.credentials"
-    private let account = "openai-compatible-api-key"
+    private let account: String
+
+    static let translationAccount = "openai-compatible-api-key"
+    static let scribeAccount = "elevenlabs-scribe-api-key"
+
+    init(account: String = KeychainService.translationAccount) {
+        self.account = account
+    }
 
     func loadAPIKey() -> String {
         var query = baseQuery

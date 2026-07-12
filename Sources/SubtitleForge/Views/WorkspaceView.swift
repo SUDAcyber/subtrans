@@ -50,9 +50,21 @@ private struct JobHeaderView: View {
                             .lineLimit(1)
                     }
                     if document.hasReviewWarnings {
-                        Label(strings.reviewWarnings(document.reviewCueIDs.count), systemImage: AppIconSymbol.reviewWarning)
+                        Button {
+                            store.showReviewCuesOnly.toggle()
+                        } label: {
+                            Label(
+                                store.showReviewCuesOnly
+                                    ? strings.showingReviewOnly(document.reviewCueIDs.count)
+                                    : strings.reviewWarnings(document.reviewCueIDs.count),
+                                systemImage: AppIconSymbol.reviewWarning
+                            )
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(AppTheme.warning)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppTheme.warning)
+                        .help(strings.toggleReviewFilter)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -84,7 +96,7 @@ private struct JobHeaderView: View {
         let strings = store.strings
 
         return HStack(spacing: 10) {
-            if store.isTranslating {
+            if store.isBusy {
                 Button {
                     store.cancelTranslation()
                 } label: {
@@ -223,14 +235,25 @@ private struct SubtitlePreviewView: View {
     @Bindable var store: AppStore
     let document: SubtitleDocument
 
+    private var isFiltering: Bool {
+        store.showReviewCuesOnly && document.hasReviewWarnings
+    }
+
+    private var visibleCues: [SubtitleCue] {
+        if isFiltering {
+            return document.cues.filter { document.reviewCueIDs.contains($0.sequence) }
+        }
+        return Array(document.cues.prefix(store.previewCueLimit))
+    }
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 1) {
                 HeaderRow(strings: store.strings)
-                ForEach(Array(document.cues.prefix(store.previewCueLimit))) { cue in
+                ForEach(visibleCues) { cue in
                     SubtitleCueRow(cue: cue, needsReview: document.reviewCueIDs.contains(cue.sequence), strings: store.strings)
                 }
-                if document.cues.count > store.previewCueLimit {
+                if !isFiltering, document.cues.count > store.previewCueLimit {
                     Text(store.strings.previewLimited(limit: store.previewCueLimit, total: document.cues.count))
                         .font(.caption)
                         .foregroundStyle(AppTheme.mutedIvory)
@@ -331,6 +354,9 @@ private struct EmptyStateView: View {
                     .foregroundStyle(AppTheme.ivory)
                 Text(strings.emptySubtitle)
                     .font(.title3)
+                    .foregroundStyle(AppTheme.mutedIvory)
+                Text(strings.transcriptionHint)
+                    .font(.callout)
                     .foregroundStyle(AppTheme.mutedIvory)
             }
             Button {

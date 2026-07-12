@@ -8,9 +8,16 @@ import UniformTypeIdentifiers
 @Observable
 final class AppStore {
     private let keychain = KeychainService()
+    private let scribeKeychain = KeychainService(account: KeychainService.scribeAccount)
     private let client: any SubtitleTranslationClient
     private var translationTask: Task<Void, Never>?
+    private var transcriptionTask: Task<Void, Never>?
+    private var typhoonInstallTask: Task<Void, Never>?
     private var historySaveTask: Task<Void, Never>?
+    /// Monotonic id for transcription runs. A cancelled run keeps executing until
+    /// its next await; comparing against this id stops it from clobbering the
+    /// state of a newer run when it finally exits.
+    private var transcriptionRunID = 0
 
     var documents: [SubtitleDocument] = DocumentHistoryStore.load() {
         didSet {
@@ -34,6 +41,14 @@ final class AppStore {
             keychain.saveAPIKey(apiKey)
         }
     }
+    var scribeAPIKey = "" {
+        didSet {
+            scribeKeychain.saveAPIKey(scribeAPIKey)
+        }
+    }
+    var isTranscribing = false
+    var isInstallingTyphoon = false
+    var typhoonInstallStatus = ""
     var interfaceLanguage = UserPreferencesStore.loadInterfaceLanguage() {
         didSet {
             UserPreferencesStore.saveInterfaceLanguage(interfaceLanguage)
@@ -47,6 +62,7 @@ final class AppStore {
     var errorMessage: String?
     var isInspectorPresented = true
     var isFindReplacePresented = false
+    var showReviewCuesOnly = false
     var replacementSearchText = ""
     var replacementText = ""
     var replacementMatchCase = false
@@ -64,6 +80,7 @@ final class AppStore {
     init(client: any SubtitleTranslationClient = OpenAICompatibleClient()) {
         self.client = client
         self.apiKey = keychain.loadAPIKey()
+        self.scribeAPIKey = scribeKeychain.loadAPIKey()
         self.progress.message = strings.idle
         emptyExpiredTrash()
         self.selectedDocumentID = activeDocuments.first?.id ?? trashedDocuments.first?.id
@@ -110,6 +127,11 @@ final class AppStore {
         selectedDocument?.isDeleted == false
             && !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !isTranslating
+            && !isTranscribing
+    }
+
+    var isBusy: Bool {
+        isTranslating || isTranscribing
     }
 
     var replacementMatchCount: Int {
@@ -135,7 +157,7 @@ final class AppStore {
         settings.providerName = "AIHubMix"
         settings.baseURL = "https://aihubmix.com/v1"
         if settings.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            settings.model = "gpt-5.5"
+            settings.model = "gpt-5.6-luna"
         }
         UserPreferencesStore.saveSettings(settings)
     }
@@ -151,7 +173,7 @@ final class AppStore {
 
     func importWithPanel() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.srtSubtitle, .plainText]
+        panel.allowedContentTypes = [.srtSubtitle, .plainText, .movie, .mpeg4Movie, .quickTimeMovie, .matroskaVideo, .audio, .mp3, .wav, .mpeg4Audio]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.prompt = strings.importAction
@@ -159,6 +181,10 @@ final class AppStore {
 
         guard panel.runModal() == .OK else { return }
         for url in panel.urls {
+            if AudioExtractor.isMediaFile(url) {
+                transcribeMedia(url: url)
+                break // one transcription at a time
+            }
             do {
                 try importFile(url: url)
             } catch {
@@ -205,6 +231,10 @@ final class AppStore {
                         self.errorMessage = self.strings.unreadableDroppedFile
                         return
                     }
+                    if AudioExtractor.isMediaFile(url) {
+                        self.transcribeMedia(url: url)
+                        return
+                    }
                     guard url.pathExtension.lowercased() == "srt" else {
                         self.errorMessage = self.strings.onlySRTDrop
                         return
@@ -223,7 +253,7 @@ final class AppStore {
     }
 
     func translateSelected() {
-        guard !isTranslating else { return }
+        guard !isTranslating, !isTranscribing else { return }
         guard let document = selectedDocument else {
             errorMessage = strings.importFileFirst
             return
@@ -252,7 +282,154 @@ final class AppStore {
     func cancelTranslation() {
         translationTask?.cancel()
         translationTask = nil
+        transcriptionTask?.cancel()
+        transcriptionTask = nil
+        transcriptionRunID += 1
+        isTranscribing = false
         progress = TranslationProgress(phase: .cancelled, message: strings.stopped)
+    }
+
+    func transcribeMedia(url: URL) {
+        guard !isBusy else { return }
+        let settingsSnapshot = settings
+        if settingsSnapshot.transcriptionEngine == .scribe,
+           scribeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            errorMessage = strings.fillScribeKey
+            isInspectorPresented = true
+            return
+        }
+        if settingsSnapshot.transcriptionEngine == .typhoon, !TyphoonTranscriber.isInstalled {
+            errorMessage = strings.typhoonNotInstalled
+            isInspectorPresented = true
+            return
+        }
+
+        isTranscribing = true
+        progress = TranslationProgress(phase: .parsing, message: strings.extractingAudio)
+        let scribeKeySnapshot = scribeAPIKey
+        transcriptionRunID += 1
+        let runID = transcriptionRunID
+        transcriptionTask?.cancel()
+        transcriptionTask = Task { [weak self] in
+            await self?.performTranscription(
+                mediaURL: url,
+                settings: settingsSnapshot,
+                scribeKey: scribeKeySnapshot,
+                runID: runID
+            )
+        }
+    }
+
+    func installTyphoon() {
+        guard !isInstallingTyphoon else { return }
+        isInstallingTyphoon = true
+        typhoonInstallStatus = strings.typhoonInstallPreparing
+        typhoonInstallTask?.cancel()
+        typhoonInstallTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await TyphoonInstaller.install { [weak self] status in
+                    Task { @MainActor [weak self] in
+                        self?.typhoonInstallStatus = status
+                    }
+                }
+                self.typhoonInstallStatus = self.strings.typhoonInstallComplete
+            } catch is CancellationError {
+                self.typhoonInstallStatus = self.strings.stopped
+            } catch {
+                self.typhoonInstallStatus = self.strings.typhoonInstallFailed
+                self.errorMessage = error.localizedDescription
+            }
+            self.isInstallingTyphoon = false
+        }
+    }
+
+    private func performTranscription(
+        mediaURL: URL,
+        settings: TranslationSettings,
+        scribeKey: String,
+        runID: Int
+    ) async {
+        defer {
+            if runID == transcriptionRunID {
+                isTranscribing = false
+            }
+        }
+        do {
+            let audioURL = try await AudioExtractor.extractAudioIfNeeded(from: mediaURL)
+            defer {
+                if audioURL != mediaURL {
+                    try? FileManager.default.removeItem(at: audioURL)
+                }
+            }
+            try Task.checkCancellation()
+
+            let transcriber: any SubtitleTranscriber
+            switch settings.transcriptionEngine {
+            case .scribe:
+                transcriber = ScribeTranscriber(apiKey: scribeKey)
+            case .typhoon:
+                transcriber = TyphoonTranscriber()
+            case .whisperKit:
+                transcriber = WhisperKitTranscriber(model: settings.whisperModel)
+            }
+
+            progress = TranslationProgress(phase: .parsing, message: strings.preparingModel)
+            let segments = try await transcriber.transcribe(
+                audioURL: audioURL,
+                languageHint: settings.transcriptionLanguage
+            ) { [weak self] update in
+                Task { @MainActor [weak self] in
+                    guard let self, self.isTranscribing, runID == self.transcriptionRunID else { return }
+                    switch update {
+                    case .preparingModel:
+                        self.progress.message = self.strings.preparingModel
+                    case let .downloadingModel(fraction):
+                        self.progress.message = self.strings.downloadingModel(percent: Int(fraction * 100))
+                    case .uploading:
+                        self.progress.message = self.strings.uploadingAudio
+                    case let .transcribing(fraction):
+                        self.progress.message = self.strings.transcribing(percent: Int(fraction * 100))
+                    }
+                }
+            }
+            try Task.checkCancellation()
+            guard runID == transcriptionRunID else { return }
+
+            let cues = SegmentCueBuilder.makeCues(from: segments)
+            guard !cues.isEmpty else {
+                progress = TranslationProgress(phase: .failed, message: strings.transcriptionEmpty)
+                return
+            }
+
+            let fileSize = (try? mediaURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? nil
+            let document = SubtitleDocument(
+                name: mediaURL.deletingPathExtension().lastPathComponent,
+                sourceURL: mediaURL,
+                rawByteCount: fileSize ?? 0,
+                targetLanguage: settings.targetLanguage,
+                cues: cues
+            )
+            documents.insert(document, at: 0)
+            selectedDocumentID = document.id
+            validation = ValidationReport.make(cues: cues)
+            progress = TranslationProgress(phase: .idle, message: strings.transcribed(count: cues.count))
+
+            // 一体化：识别完成后直接进入翻译流水线。必须先清掉转写状态，
+            // 否则 canTranslate 因 isTranscribing 仍为 true 而永远不通过。
+            isTranscribing = false
+            if canTranslate {
+                translateSelected()
+            }
+        } catch is CancellationError {
+            if runID == transcriptionRunID {
+                progress = TranslationProgress(phase: .cancelled, message: strings.stopped)
+            }
+        } catch {
+            guard runID == transcriptionRunID else { return }
+            progress = TranslationProgress(phase: .failed, message: strings.transcriptionFailed)
+            errorMessage = error.localizedDescription
+        }
     }
 
     func clearTranslations() {

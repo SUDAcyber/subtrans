@@ -113,6 +113,34 @@ public final class OpenAICompatibleClient: SubtitleTranslationClient, @unchecked
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Resolves the model name to send to the chat-completions endpoint.
+    ///
+    /// gpt-5.6-luna does not accept `reasoning_effort` on chat completions — reasoning
+    /// depth is selected via model variants instead (`-low` / `-high`, base = none).
+    /// Returns the resolved model plus whether `reasoning_effort` may be sent.
+    public static func resolvedChatModel(
+        model: String,
+        effort: ReasoningEffort
+    ) -> (model: String, sendsReasoningEffort: Bool) {
+        let trimmed = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.lowercased().hasPrefix("gpt-5.6-luna") else {
+            return (trimmed, true)
+        }
+        // Explicit variant (e.g. gpt-5.6-luna-high) is respected as-is.
+        guard trimmed.lowercased() == "gpt-5.6-luna" else {
+            return (trimmed, false)
+        }
+        switch effort {
+        case .none:
+            return (trimmed, false)
+        case .low:
+            return (trimmed + "-low", false)
+        case .medium, .high:
+            // Chat endpoint only offers low/high variants; medium rounds up.
+            return (trimmed + "-high", false)
+        }
+    }
+
     private func chatCompletion(
         batch: TranslationBatch,
         settings: TranslationSettings,
@@ -122,15 +150,16 @@ public final class OpenAICompatibleClient: SubtitleTranslationClient, @unchecked
         let system = TranslationPromptBuilder.systemPrompt(settings: settings, contextSummary: batch.contextSummary)
         let user = try TranslationPromptBuilder.userPrompt(batch: batch, settings: settings)
 
+        let resolved = Self.resolvedChatModel(model: settings.model, effort: settings.reasoningEffort)
         var body: [String: Any] = [
-            "model": settings.model,
+            "model": resolved.model,
             "messages": [
                 ["role": "system", "content": system],
                 ["role": "user", "content": user]
             ],
             "response_format": ["type": "json_object"]
         ]
-        if settings.reasoningEffort != .none {
+        if resolved.sendsReasoningEffort, settings.reasoningEffort != .none {
             body["reasoning_effort"] = settings.reasoningEffort.rawValue
         }
 

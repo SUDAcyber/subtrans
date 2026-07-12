@@ -56,7 +56,7 @@ struct ContentView: View {
                 .keyboardShortcut("f", modifiers: [.command])
                 .disabled(store.selectedDocument == nil)
 
-                if store.isTranslating {
+                if store.isBusy {
                     Button {
                         store.cancelTranslation()
                     } label: {

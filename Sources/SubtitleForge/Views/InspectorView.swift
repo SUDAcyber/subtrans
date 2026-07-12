@@ -56,6 +56,10 @@ struct InspectorView: View {
                 modelSection
                 advancedSection
             }
+        case .transcription:
+            tabScroll {
+                transcriptionSection
+            }
         case .memory:
             tabScroll {
                 memorySection
@@ -112,6 +116,23 @@ struct InspectorView: View {
         return SettingsGroup(title: strings.model) {
             SettingsField(title: strings.modelName) {
                 TextField(strings.modelName, text: $store.settings.model)
+            }
+
+            HStack(spacing: 6) {
+                ForEach(["gpt-5.6-luna", "gpt-5.5"], id: \.self) { model in
+                    Button(model) {
+                        store.settings.model = model
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+
+            if store.settings.model.lowercased().hasPrefix("gpt-5.6-luna"),
+               store.settings.endpoint == .chatCompletions {
+                Text(strings.lunaChatHint)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.mutedIvory)
             }
 
             Picker(strings.endpointMode, selection: $store.settings.endpoint) {
@@ -177,6 +198,75 @@ struct InspectorView: View {
             get: { strings.targetLanguageLabel(store.settings.targetLanguage) },
             set: { store.settings.targetLanguage = $0 }
         )
+    }
+
+    private var transcriptionSection: some View {
+        let strings = store.strings
+
+        return SettingsGroup(title: strings.transcriptionTab) {
+            Text(strings.transcriptionHint)
+                .font(.caption)
+                .foregroundStyle(AppTheme.mutedIvory)
+
+            Picker(strings.transcriptionEngine, selection: $store.settings.transcriptionEngine) {
+                Text(strings.whisperLocalEngine).tag(TranscriptionEngine.whisperKit)
+                Text(strings.typhoonEngine).tag(TranscriptionEngine.typhoon)
+                Text(strings.scribeCloudEngine).tag(TranscriptionEngine.scribe)
+            }
+            .pickerStyle(.radioGroup)
+
+            Picker(strings.spokenLanguage, selection: $store.settings.transcriptionLanguage) {
+                Text(strings.autoDetectLanguage).tag("auto")
+                Text("ไทย 泰语").tag("th")
+                Text("English 英语").tag("en")
+                Text("中文").tag("zh")
+                Text("日本語 日语").tag("ja")
+                Text("한국어 韩语").tag("ko")
+            }
+
+            if store.settings.transcriptionEngine == .whisperKit {
+                Picker(strings.whisperModelName, selection: $store.settings.whisperModel) {
+                    Text("large-v3").tag("large-v3")
+                    Text("large-v3-turbo").tag("large-v3-v20240930")
+                    Text("medium").tag("medium")
+                    Text("small").tag("small")
+                }
+
+                Text(strings.whisperModelHint)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.mutedIvory)
+            } else if store.settings.transcriptionEngine == .typhoon {
+                Text(TyphoonTranscriber.isInstalled ? strings.typhoonHint : strings.typhoonNotInstalled)
+                    .font(.caption)
+                    .foregroundStyle(TyphoonTranscriber.isInstalled ? AppTheme.mutedIvory : AppTheme.warning)
+
+                if !TyphoonTranscriber.isInstalled {
+                    Button {
+                        store.installTyphoon()
+                    } label: {
+                        Label(strings.installTyphoon, systemImage: "arrow.down.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(store.isInstallingTyphoon)
+
+                    if store.isInstallingTyphoon {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(store.typhoonInstallStatus)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.mutedIvory)
+                    }
+                }
+            } else {
+                SettingsField(title: strings.scribeKey) {
+                    SecureField(strings.scribeKey, text: $store.scribeAPIKey)
+                }
+
+                Text(strings.scribeHint)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.mutedIvory)
+            }
+        }
     }
 
     private var memorySection: some View {
@@ -267,6 +357,7 @@ struct InspectorView: View {
 
 private enum InspectorTab: String, CaseIterable, Identifiable {
     case model
+    case transcription
     case memory
     case quality
 
@@ -276,6 +367,8 @@ private enum InspectorTab: String, CaseIterable, Identifiable {
         switch self {
         case .model:
             return strings.modelSettingsTab
+        case .transcription:
+            return strings.transcriptionTab
         case .memory:
             return strings.memoryTab
         case .quality:
@@ -287,6 +380,8 @@ private enum InspectorTab: String, CaseIterable, Identifiable {
         switch self {
         case .model:
             return AppIconSymbol.modelSettings
+        case .transcription:
+            return AppIconSymbol.transcribe
         case .memory:
             return AppIconSymbol.memory
         case .quality:
