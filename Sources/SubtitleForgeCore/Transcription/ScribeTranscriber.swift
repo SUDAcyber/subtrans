@@ -39,7 +39,7 @@ public final class ScribeTranscriber: SubtitleTranscriber, @unchecked Sendable {
     ) async throws -> [TranscribedSegment] {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { throw ScribeTranscriberError.emptyAPIKey }
-        guard let audioData = try? Data(contentsOf: audioURL) else {
+        guard FileManager.default.isReadableFile(atPath: audioURL.path) else {
             throw ScribeTranscriberError.unreadableAudio
         }
 
@@ -61,20 +61,26 @@ public final class ScribeTranscriber: SubtitleTranscriber, @unchecked Sendable {
             fields.append(("language_code", languageHint))
         }
 
-        var body = Data()
-        for field in fields {
-            body.append("--\(boundary)\r\n")
-            body.append("Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n")
-            body.append("\(field.value)\r\n")
+        let multipartURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SubtitleForge-Scribe-\(UUID().uuidString).multipart")
+        defer { try? FileManager.default.removeItem(at: multipartURL) }
+        do {
+            try Self.writeMultipartBody(
+                to: multipartURL,
+                boundary: boundary,
+                fields: fields,
+                audioURL: audioURL
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw ScribeTranscriberError.unreadableAudio
         }
-        body.append("--\(boundary)\r\n")
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(audioURL.lastPathComponent)\"\r\n")
-        body.append("Content-Type: application/octet-stream\r\n\r\n")
-        body.append(audioData)
-        body.append("\r\n--\(boundary)--\r\n")
-        request.httpBody = body
+        if let size = try? multipartURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+            request.setValue(String(size), forHTTPHeaderField: "Content-Length")
+        }
 
-        let (data, response) = try await urlSession.data(for: request)
+        let (data, response) = try await urlSession.upload(for: request, fromFile: multipartURL)
         if let httpResponse = response as? HTTPURLResponse,
            !(200..<300).contains(httpResponse.statusCode) {
             let message = String(data: data, encoding: .utf8) ?? "未知错误"
@@ -101,6 +107,44 @@ public final class ScribeTranscriber: SubtitleTranscriber, @unchecked Sendable {
         }
         return segments
     }
+
+    static func writeMultipartBody(
+        to outputURL: URL,
+        boundary: String,
+        fields: [(name: String, value: String)],
+        audioURL: URL
+    ) throws {
+        guard FileManager.default.createFile(atPath: outputURL.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        let output = try FileHandle(forWritingTo: outputURL)
+        let input = try FileHandle(forReadingFrom: audioURL)
+        defer {
+            try? output.close()
+            try? input.close()
+        }
+
+        func write(_ string: String) throws {
+            try output.write(contentsOf: Data(string.utf8))
+        }
+
+        for field in fields {
+            try write("--\(boundary)\r\n")
+            try write("Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n")
+            try write("\(field.value)\r\n")
+        }
+
+        let safeFilename = audioURL.lastPathComponent.replacingOccurrences(of: "\"", with: "_")
+        try write("--\(boundary)\r\n")
+        try write("Content-Disposition: form-data; name=\"file\"; filename=\"\(safeFilename)\"\r\n")
+        try write("Content-Type: application/octet-stream\r\n\r\n")
+
+        while let chunk = try input.read(upToCount: 1_048_576), !chunk.isEmpty {
+            try Task.checkCancellation()
+            try output.write(contentsOf: chunk)
+        }
+        try write("\r\n--\(boundary)--\r\n")
+    }
 }
 
 private struct ScribeResponse: Decodable {
@@ -121,12 +165,4 @@ private struct ScribeResponse: Decodable {
 
     let text: String
     let words: [Word]?
-}
-
-private extension Data {
-    mutating func append(_ string: String) {
-        if let data = string.data(using: .utf8) {
-            append(data)
-        }
-    }
 }

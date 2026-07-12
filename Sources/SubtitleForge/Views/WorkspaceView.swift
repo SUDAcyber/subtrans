@@ -116,6 +116,14 @@ private struct JobHeaderView: View {
             }
 
             Button {
+                store.exportSourceSubtitleWithPanel()
+            } label: {
+                Label(strings.exportSourceSubtitle, systemImage: AppIconSymbol.document)
+            }
+            .buttonStyle(.bordered)
+            .disabled(document.cues.isEmpty || document.isDeleted)
+
+            Button {
                 store.exportSelectedToSourceFolder()
             } label: {
                 Label(strings.generateSubtitle, systemImage: AppIconSymbol.generate)
@@ -181,6 +189,11 @@ private struct FindReplaceToolbar: View {
                 .foregroundStyle(store.replacementMatchCount > 0 ? AppTheme.brass : AppTheme.mutedIvory)
                 .frame(width: 48, alignment: .trailing)
 
+            Button(strings.locateNextMatch) {
+                store.locateNextTranslationMatch()
+            }
+            .disabled(store.replacementMatchCount == 0)
+
             Button(strings.replaceOne) {
                 store.replaceOneTranslationMatch()
             }
@@ -217,6 +230,11 @@ private struct FindReplaceToolbar: View {
 
                 Spacer()
 
+                Button(strings.locateNextMatch) {
+                    store.locateNextTranslationMatch()
+                }
+                .disabled(store.replacementMatchCount == 0)
+
                 Button(strings.replaceOne) {
                     store.replaceOneTranslationMatch()
                 }
@@ -243,24 +261,42 @@ private struct SubtitlePreviewView: View {
         if isFiltering {
             return document.cues.filter { document.reviewCueIDs.contains($0.sequence) }
         }
-        return Array(document.cues.prefix(store.previewCueLimit))
+        let locatedIndex = store.replacementLocatedCueSequence.flatMap { sequence in
+            document.cues.firstIndex { $0.sequence == sequence }
+        }
+        let limit = max(store.previewCueLimit, locatedIndex.map { $0 + 1 } ?? 0)
+        return Array(document.cues.prefix(limit))
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 1) {
-                HeaderRow(strings: store.strings)
-                ForEach(visibleCues) { cue in
-                    SubtitleCueRow(cue: cue, needsReview: document.reviewCueIDs.contains(cue.sequence), strings: store.strings)
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 1) {
+                    HeaderRow(strings: store.strings)
+                    ForEach(visibleCues) { cue in
+                        SubtitleCueRow(
+                            cue: cue,
+                            needsReview: document.reviewCueIDs.contains(cue.sequence),
+                            isLocated: store.replacementLocatedCueSequence == cue.sequence,
+                            strings: store.strings
+                        )
+                        .id(cue.sequence)
+                    }
+                    if !isFiltering, document.cues.count > visibleCues.count {
+                        Text(store.strings.previewLimited(limit: store.previewCueLimit, total: document.cues.count))
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.mutedIvory)
+                            .padding(.vertical, 18)
+                    }
                 }
-                if !isFiltering, document.cues.count > store.previewCueLimit {
-                    Text(store.strings.previewLimited(limit: store.previewCueLimit, total: document.cues.count))
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.mutedIvory)
-                        .padding(.vertical, 18)
+                .padding(18)
+            }
+            .onChange(of: store.replacementLocatedCueSequence) { _, sequence in
+                guard let sequence else { return }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    proxy.scrollTo(sequence, anchor: .center)
                 }
             }
-            .padding(18)
         }
     }
 }
@@ -287,6 +323,7 @@ private struct HeaderRow: View {
 private struct SubtitleCueRow: View {
     let cue: SubtitleCue
     let needsReview: Bool
+    let isLocated: Bool
     let strings: AppStrings
 
     var body: some View {
@@ -326,15 +363,24 @@ private struct SubtitleCueRow: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(needsReview ? AppTheme.warning.opacity(0.65) : .clear, lineWidth: 1)
+                .stroke(rowStroke, lineWidth: isLocated ? 2 : 1)
         )
     }
 
     private var rowBackground: Color {
+        if isLocated {
+            return AppTheme.brass.opacity(0.2)
+        }
         if needsReview {
             return AppTheme.warning.opacity(0.14)
         }
         return cue.hasTranslation ? AppTheme.graphiteRaised : AppTheme.graphitePanel.opacity(0.76)
+    }
+
+    private var rowStroke: Color {
+        if isLocated { return AppTheme.brass }
+        if needsReview { return AppTheme.warning.opacity(0.65) }
+        return .clear
     }
 }
 

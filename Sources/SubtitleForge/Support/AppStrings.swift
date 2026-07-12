@@ -98,6 +98,8 @@ struct AppStrings {
     var taskProgress: String { choose("任务进度", "Task Progress") }
     var generateSubtitle: String { choose("生成字幕", "Generate Subtitle") }
     var saveAs: String { choose("另存为", "Save As") }
+    var exportSourceSubtitle: String { choose("导出原字幕", "Export Source") }
+    var sourceSubtitleFilenameSuffix: String { choose("原字幕", "source") }
     var searchTranslation: String { choose("查找译文", "Find Translation") }
     var replaceWith: String { choose("替换为", "Replace With") }
     var matchCase: String { choose("区分大小写", "Match Case") }
@@ -123,6 +125,7 @@ struct AppStrings {
     var restored: String { choose("已恢复", "Restored") }
     var permanentlyDeleted: String { choose("已永久删除", "Deleted permanently") }
     var exported: String { choose("已导出", "Exported") }
+    var sourceSubtitleExported: String { choose("原字幕已导出", "Source subtitles exported") }
     var noTranslatableSubtitles: String { choose("没有可翻译的字幕", "No subtitles to translate") }
     var transcriptionTab: String { choose("语音识别", "Transcribe") }
     var transcriptionEngine: String { choose("识别引擎", "Engine") }
@@ -181,6 +184,10 @@ struct AppStrings {
     var fillAPIKey: String { choose("请先在右侧填写密钥", "Enter an API key in Settings first") }
     var unreadableDroppedFile: String { choose("无法读取拖入的文件", "Could not read the dropped file") }
     var onlySRTDrop: String { choose("目前只支持拖入 SRT 字幕文件", "Only SRT subtitle files can be dropped") }
+    func unsupportedImportType(_ extensionName: String) -> String {
+        let type = extensionName.isEmpty ? "未知格式" : ".\(extensionName.lowercased())"
+        return choose("不支持导入 \(type) 文件", "Unsupported import type: \(type)")
+    }
     var enterSearchText: String { choose("请先输入要查找的译文", "Enter translation text to find first") }
     var noTranslationMatch: String { choose("没有找到匹配译文", "No matching translation found") }
     var memoryNeedsSourceAndTarget: String { choose("记忆库需要同时填写原文和固定译法", "Memory entries need both source and fixed translation") }
@@ -235,6 +242,7 @@ struct AppStrings {
     func matchCount(_ count: Int) -> String {
         choose("\(count) 处", "\(count) matches")
     }
+    var locateNextMatch: String { choose("定位下一处", "Find Next") }
 
     func fixedTranslationCount(_ count: Int) -> String {
         choose("\(count) 条固定译法", "\(count) fixed translations")

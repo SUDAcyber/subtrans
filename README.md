@@ -1,5 +1,15 @@
 # SUDA字幕翻译助手
 
+## 首次打开时 macOS 提示软件有风险或无法验证
+
+当前发布包没有 Apple Developer ID 签名和公证，macOS 可能显示“无法验证开发者”、“Apple 无法检查其是否包含恶意软件”或软件有风险的提示。请使用 Apple 官方允许的方式打开：
+
+1. 将 `SUDA字幕翻译助手.app` 拖入“应用程序”文件夹。
+2. 在 Finder 中找到该 App，按住 Control 点击或右键点击，选择“打开”，再次点击“打开”。
+3. 如果仍被阻止，打开“系统设置 → 隐私与安全性”，滚动到“安全性”，在该 App 的提示旁点击“仍要打开”，然后使用 Touch ID 或管理员密码确认。
+
+不建议关闭 Gatekeeper 或修改全局安全设置。下载后可使用 Release 中的 SHA-256 校验文件确认 DMG 完整性。
+
 SUDA字幕翻译助手是一个 macOS 字幕翻译工具，英文界面名为 SUDATranslator。软件默认使用中文界面和 AIHubMix 的 OpenAI 兼容接口，也可以切换到英文界面，或切换到任意兼容 `/v1/chat/completions` 或 `/v1/responses` 的大模型服务。
 
 ![UI concept](Docs/Concepts/subtitle-forge-ui-concept.png)
@@ -79,7 +89,7 @@ swift test
 生成 macOS `.app`、`.zip` 和 `.dmg`：
 
 ```bash
-./script/package_release.sh 0.3.0
+./script/package_release.sh 0.3.1
 ```
 
 产物会输出到 `dist/release/`。如果本机没有 Developer ID 证书，脚本会使用 ad-hoc 签名，适合内部测试。正式发布时设置 `CODE_SIGN_IDENTITY` 和已保存的 `NOTARY_PROFILE`，脚本会自动签名、提交 Apple 公证并 staple 公证票据。
