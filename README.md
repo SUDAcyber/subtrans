@@ -35,6 +35,36 @@ Release 为了控制体积，不内置 Typhoon 或 Whisper 大模型；应用与
 - 安装失败：先确认 GitHub 和 Hugging Face 可访问、磁盘空间足够，然后重试一键安装。如安装曾中断，可退出 App，删除上述 `typhoon` 目录后重新安装。
 - 准确率注意：背景音乐、多人抢话、强口音和过低音量仍会导致错识；可用 WhisperKit `large-v3` 或 ElevenLabs Scribe 交叉对比。
 
+#### 网络不稳定时预下载 Typhoon 模型
+
+如果目标 Mac 访问 Hugging Face 不稳定，可以在网络正常、已经完成 Typhoon 一键安装的 Mac 上预先下载模型，再把完整缓存复制到目标 Mac。不要只复制单个 `.nemo` 文件；Hugging Face 缓存还包含版本引用和快照目录。
+
+1. 在网络正常的 Mac 上下载并打包模型缓存：
+
+   ```bash
+   PYTHON="$HOME/Library/Application Support/SUDA字幕翻译助手/typhoon/venv/bin/python3"
+
+   "$PYTHON" -c 'from huggingface_hub import snapshot_download; print(snapshot_download("scb10x/typhoon-asr-realtime"))'
+
+   ditto -c -k --keepParent \
+     "$HOME/.cache/huggingface/hub/models--scb10x--typhoon-asr-realtime" \
+     "$HOME/Desktop/Typhoon模型缓存.zip"
+   ```
+
+2. 把 `Typhoon模型缓存.zip` 复制到目标 Mac 的“下载”目录，然后执行：
+
+   ```bash
+   mkdir -p "$HOME/.cache/huggingface/hub"
+
+   ditto -x -k \
+     "$HOME/Downloads/Typhoon模型缓存.zip" \
+     "$HOME/.cache/huggingface/hub"
+   ```
+
+3. 在目标 Mac 中打开 App，点击“一键安装 Typhoon”。安装器仍会准备 Python 和 NeMo 依赖；之后首次识别会直接复用已复制的模型缓存，不再重复下载模型权重。
+
+此方法主要解决 Hugging Face 模型下载不稳定，不是完整的离线安装。首次安装 Python、uv 和 Typhoon 依赖时仍需访问 GitHub 及 Python 软件源。
+
 ### 4. WhisperKit 本地多语识别
 
 - 模型仓库：[Argmax WhisperKit Core ML Models](https://huggingface.co/argmaxinc/whisperkit-coreml)
