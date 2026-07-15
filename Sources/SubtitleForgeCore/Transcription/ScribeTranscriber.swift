@@ -9,13 +9,13 @@ public enum ScribeTranscriberError: Error, LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .emptyAPIKey:
-            return "请先在识别设置中填写 ElevenLabs 密钥"
+            return "请先在识别设置中填写 ElevenLabs 密钥 / Enter an ElevenLabs API key in Transcribe settings first"
         case .unreadableAudio:
-            return "无法读取音频文件"
+            return "无法读取音频文件 / Could not read the audio file"
         case let .httpError(statusCode, message):
-            return "识别请求失败 \(statusCode)：\(message)"
+            return "识别请求失败 / Transcription request failed \(statusCode): \(message)"
         case .emptyResult:
-            return "识别结果为空"
+            return "识别结果为空 / Transcription returned nothing"
         }
     }
 }
@@ -57,7 +57,7 @@ public final class ScribeTranscriber: SubtitleTranscriber, @unchecked Sendable {
             ("tag_audio_events", "false"),
             ("diarize", "false")
         ]
-        if let languageHint, !languageHint.isEmpty, languageHint != "auto" {
+        if let languageHint {
             fields.append(("language_code", languageHint))
         }
 

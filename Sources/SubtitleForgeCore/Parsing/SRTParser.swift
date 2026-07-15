@@ -89,14 +89,55 @@ public enum SRTParser {
     }
 
     public static func render(_ cues: [SubtitleCue], preferTranslations: Bool = true) -> String {
+        render(cues, layout: preferTranslations ? .translationOnly : .sourceOnly)
+    }
+
+    public static func render(_ cues: [SubtitleCue], layout: SubtitleExportLayout) -> String {
         cues.map { cue in
             [
                 "\(cue.sequence)",
                 cue.timecode,
-                cue.renderedText(preferTranslation: preferTranslations)
+                renderedText(for: cue, layout: layout)
             ].joined(separator: "\n")
         }
         .joined(separator: "\n\n")
         + "\n"
     }
+
+    private static func renderedText(for cue: SubtitleCue, layout: SubtitleExportLayout) -> String {
+        let source = cue.text
+        let translation = cue.hasTranslation ? cue.translation : nil
+        switch layout {
+        case .sourceOnly:
+            return source
+        case .translationOnly:
+            return translation ?? source
+        case .bilingualTranslationFirst:
+            guard let translation else { return source }
+            return "\(singleLine(translation))\n\(singleLine(source))"
+        case .bilingualSourceFirst:
+            guard let translation else { return source }
+            return "\(singleLine(source))\n\(singleLine(translation))"
+        }
+    }
+
+    /// Collapses internal line breaks so a bilingual cue stays exactly two lines
+    /// (players otherwise show 3+ stacked lines that overflow the safe area).
+    private static func singleLine(_ text: String) -> String {
+        text.split(whereSeparator: \.isNewline).joined(separator: " ")
+    }
+}
+
+public enum SubtitleExportLayout: String, CaseIterable, Codable, Identifiable, Sendable {
+    case translationOnly
+    case bilingualTranslationFirst
+    case bilingualSourceFirst
+    case sourceOnly
+
+    public var id: String { rawValue }
+
+    /// Layout choices exposed in export settings; sourceOnly has its own button.
+    public static let exportChoices: [SubtitleExportLayout] = [
+        .translationOnly, .bilingualTranslationFirst, .bilingualSourceFirst
+    ]
 }

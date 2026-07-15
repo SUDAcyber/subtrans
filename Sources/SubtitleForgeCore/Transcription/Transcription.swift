@@ -9,7 +9,7 @@ public enum TranscriptionEngine: String, CaseIterable, Codable, Identifiable, Se
 }
 
 /// A recognized span of speech with absolute timestamps in seconds.
-public struct TranscribedSegment: Equatable, Sendable {
+public struct TranscribedSegment: Codable, Equatable, Sendable {
     public var start: Double
     public var end: Double
     public var text: String

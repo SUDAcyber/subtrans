@@ -66,6 +66,23 @@ private struct JobHeaderView: View {
                         .foregroundStyle(AppTheme.warning)
                         .help(strings.toggleReviewFilter)
                     }
+                    if !store.validation.fastCueIDs.isEmpty || store.showFastCuesOnly {
+                        Button {
+                            store.showFastCuesOnly.toggle()
+                        } label: {
+                            Label(
+                                store.showFastCuesOnly
+                                    ? strings.showingFastOnly(store.validation.fastCueIDs.count)
+                                    : strings.fastWarnings(store.validation.fastCueIDs.count),
+                                systemImage: AppIconSymbol.readingSpeed
+                            )
+                            .font(.caption.weight(.medium))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(AppTheme.blueSlate)
+                        .help(strings.toggleFastFilter)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -76,6 +93,10 @@ private struct JobHeaderView: View {
                 HStack {
                     Text(store.progress.message)
                         .lineLimit(1)
+                    if store.pendingMediaCount > 0 {
+                        Text(strings.queuedFiles(store.pendingMediaCount))
+                            .foregroundStyle(AppTheme.brass)
+                    }
                     Spacer()
                     Text(progressDetailText)
                         .foregroundStyle(store.validation.isComplete ? AppTheme.success : AppTheme.mutedIvory)
@@ -158,17 +179,19 @@ private struct FindReplaceToolbar: View {
 
     var body: some View {
         let strings = store.strings
+        // Hoisted: each read walks every cue translation, so read it once per render.
+        let matchCount = store.replacementMatchCount
 
         ViewThatFits(in: .horizontal) {
-            horizontalLayout(strings: strings)
-            compactLayout(strings: strings)
+            horizontalLayout(strings: strings, matchCount: matchCount)
+            compactLayout(strings: strings, matchCount: matchCount)
         }
         .padding(.horizontal, 26)
         .padding(.vertical, 12)
         .background(AppTheme.graphiteRaised.opacity(0.76))
     }
 
-    private func horizontalLayout(strings: AppStrings) -> some View {
+    private func horizontalLayout(strings: AppStrings, matchCount: Int) -> some View {
         HStack(spacing: 10) {
             Image(systemName: AppIconSymbol.search)
                 .foregroundStyle(AppTheme.mutedIvory)
@@ -184,15 +207,15 @@ private struct FindReplaceToolbar: View {
             Toggle(strings.matchCase, isOn: $store.replacementMatchCase)
                 .toggleStyle(.checkbox)
 
-            Text(strings.matchCount(store.replacementMatchCount))
+            Text(strings.matchCount(matchCount))
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(store.replacementMatchCount > 0 ? AppTheme.brass : AppTheme.mutedIvory)
+                .foregroundStyle(matchCount > 0 ? AppTheme.brass : AppTheme.mutedIvory)
                 .frame(width: 48, alignment: .trailing)
 
             Button(strings.locateNextMatch) {
                 store.locateNextTranslationMatch()
             }
-            .disabled(store.replacementMatchCount == 0)
+            .disabled(matchCount == 0)
 
             Button(strings.replaceOne) {
                 store.replaceOneTranslationMatch()
@@ -202,19 +225,19 @@ private struct FindReplaceToolbar: View {
             Button(strings.replaceAll) {
                 store.replaceAllTranslationMatches()
             }
-            .disabled(store.selectedDocument == nil || store.replacementMatchCount == 0)
+            .disabled(store.selectedDocument == nil || matchCount == 0)
         }
     }
 
-    private func compactLayout(strings: AppStrings) -> some View {
+    private func compactLayout(strings: AppStrings, matchCount: Int) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label(strings.findReplaceTranslation, systemImage: AppIconSymbol.replace)
                     .foregroundStyle(AppTheme.mutedIvory)
                 Spacer()
-                Text(strings.matchCount(store.replacementMatchCount))
+                Text(strings.matchCount(matchCount))
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(store.replacementMatchCount > 0 ? AppTheme.brass : AppTheme.mutedIvory)
+                    .foregroundStyle(matchCount > 0 ? AppTheme.brass : AppTheme.mutedIvory)
             }
 
             HStack(spacing: 10) {
@@ -233,7 +256,7 @@ private struct FindReplaceToolbar: View {
                 Button(strings.locateNextMatch) {
                     store.locateNextTranslationMatch()
                 }
-                .disabled(store.replacementMatchCount == 0)
+                .disabled(matchCount == 0)
 
                 Button(strings.replaceOne) {
                     store.replaceOneTranslationMatch()
@@ -243,7 +266,7 @@ private struct FindReplaceToolbar: View {
                 Button(strings.replaceAll) {
                     store.replaceAllTranslationMatches()
                 }
-                .disabled(store.selectedDocument == nil || store.replacementMatchCount == 0)
+                .disabled(store.selectedDocument == nil || matchCount == 0)
             }
         }
     }
@@ -252,13 +275,18 @@ private struct FindReplaceToolbar: View {
 private struct SubtitlePreviewView: View {
     @Bindable var store: AppStore
     let document: SubtitleDocument
+    @Environment(\.undoManager) private var undoManager
 
     private var isFiltering: Bool {
-        store.showReviewCuesOnly && document.hasReviewWarnings
+        (store.showReviewCuesOnly && document.hasReviewWarnings) || store.showFastCuesOnly
     }
 
     private var visibleCues: [SubtitleCue] {
-        if isFiltering {
+        if store.showFastCuesOnly {
+            let limit = store.settings.readingSpeedLimit
+            return document.cues.filter { ($0.translationCPS ?? 0) > limit }
+        }
+        if store.showReviewCuesOnly, document.hasReviewWarnings {
             return document.cues.filter { document.reviewCueIDs.contains($0.sequence) }
         }
         let locatedIndex = store.replacementLocatedCueSequence.flatMap { sequence in
@@ -269,20 +297,35 @@ private struct SubtitlePreviewView: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
+        // Computed once per render (each evaluation walks/filters the cue list).
+        let cues = visibleCues
+        return ScrollViewReader { proxy in
             ScrollView {
+                // Identity tied to the document so per-row @State (open inline
+                // editors, drafts) is discarded when the selection switches.
                 LazyVStack(spacing: 1) {
                     HeaderRow(strings: store.strings)
-                    ForEach(visibleCues) { cue in
+                    ForEach(cues) { cue in
                         SubtitleCueRow(
                             cue: cue,
                             needsReview: document.reviewCueIDs.contains(cue.sequence),
                             isLocated: store.replacementLocatedCueSequence == cue.sequence,
-                            strings: store.strings
+                            readingSpeedLimit: store.settings.readingSpeedLimit,
+                            strings: store.strings,
+                            nameCandidates: { store.nameCandidates(forCueSequence: cue.sequence) },
+                            onPinNames: { store.pinNames($0, forCueSequence: cue.sequence) },
+                            onEditTranslation: { store.updateTranslation(documentID: document.id, sequence: cue.sequence, text: $0, undoManager: undoManager) }
                         )
                         .id(cue.sequence)
                     }
-                    if !isFiltering, document.cues.count > visibleCues.count {
+                    if isFiltering, cues.isEmpty {
+                        Text(store.strings.filterEmpty)
+                            .font(.callout)
+                            .foregroundStyle(AppTheme.mutedIvory)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 36)
+                    }
+                    if !isFiltering, document.cues.count > cues.count {
                         Text(store.strings.previewLimited(limit: store.previewCueLimit, total: document.cues.count))
                             .font(.caption)
                             .foregroundStyle(AppTheme.mutedIvory)
@@ -290,6 +333,7 @@ private struct SubtitlePreviewView: View {
                     }
                 }
                 .padding(18)
+                .id(document.id)
             }
             .onChange(of: store.replacementLocatedCueSequence) { _, sequence in
                 guard let sequence else { return }
@@ -324,7 +368,20 @@ private struct SubtitleCueRow: View {
     let cue: SubtitleCue
     let needsReview: Bool
     let isLocated: Bool
+    let readingSpeedLimit: Double
     let strings: AppStrings
+    let nameCandidates: () -> [String]
+    let onPinNames: ([(source: String, target: String)]) -> Void
+    let onEditTranslation: (String) -> Void
+
+    @State private var isEditing = false
+    @State private var draft = ""
+    @State private var isNamePopoverPresented = false
+    @FocusState private var editorFocused: Bool
+
+    private var isFast: Bool {
+        (cue.translationCPS ?? 0) > readingSpeedLimit
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -336,10 +393,34 @@ private struct SubtitleCueRow: View {
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(AppTheme.mutedIvory)
                     .textSelection(.enabled)
+                if isFast {
+                    Label(strings.tooFast, systemImage: AppIconSymbol.readingSpeed)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.blueSlate)
+                        .help(strings.tooFastHelp)
+                }
                 if needsReview {
                     Label(strings.reviewName, systemImage: AppIconSymbol.reviewWarning)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(AppTheme.warning)
+                    Button {
+                        isNamePopoverPresented = true
+                    } label: {
+                        Label(strings.keepNames, systemImage: AppIconSymbol.memory)
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(AppTheme.brass)
+                    .help(strings.keepNamesHelp)
+                    .popover(isPresented: $isNamePopoverPresented, arrowEdge: .trailing) {
+                        NamePinPopover(
+                            candidates: nameCandidates(),
+                            strings: strings,
+                            onConfirm: { entries in
+                                onPinNames(entries)
+                            }
+                        )
+                    }
                 }
             }
             .frame(width: 168, alignment: .leading)
@@ -350,10 +431,7 @@ private struct SubtitleCueRow: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text(cue.translation?.isEmpty == false ? cue.translation ?? "" : strings.pendingTranslation)
-                .font(.body)
-                .foregroundStyle(cue.hasTranslation ? AppTheme.ivory : AppTheme.blueSlate)
-                .textSelection(.enabled)
+            translationColumn
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
@@ -365,6 +443,64 @@ private struct SubtitleCueRow: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .stroke(rowStroke, lineWidth: isLocated ? 2 : 1)
         )
+    }
+
+    @ViewBuilder
+    private var translationColumn: some View {
+        if isEditing {
+            TextField(strings.pendingTranslation, text: $draft, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .font(.body)
+                .focused($editorFocused)
+                .onSubmit(commitEdit)
+                .onExitCommand {
+                    isEditing = false
+                }
+                .onChange(of: editorFocused) { _, focused in
+                    if !focused, isEditing {
+                        commitEdit()
+                    }
+                }
+        } else {
+            // The translation Text keeps .textSelection for copy, but selectable
+            // text swallows clicks on macOS, so editing is driven by an explicit
+            // pencil button and a context-menu entry rather than a tap gesture.
+            HStack(alignment: .top, spacing: 6) {
+                Text(cue.translation?.isEmpty == false ? cue.translation ?? "" : strings.pendingTranslation)
+                    .font(.body)
+                    .foregroundStyle(cue.hasTranslation ? AppTheme.ivory : AppTheme.blueSlate)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Button {
+                    beginEdit()
+                } label: {
+                    Image(systemName: AppIconSymbol.edit)
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(AppTheme.mutedIvory)
+                .help(strings.editTranslation)
+            }
+            .contentShape(Rectangle())
+            .contextMenu {
+                Button(strings.editTranslation, systemImage: AppIconSymbol.edit) {
+                    beginEdit()
+                }
+            }
+        }
+    }
+
+    private func beginEdit() {
+        draft = cue.translation ?? ""
+        isEditing = true
+        editorFocused = true
+    }
+
+    private func commitEdit() {
+        guard isEditing else { return }
+        isEditing = false
+        onEditTranslation(draft)
     }
 
     private var rowBackground: Color {
@@ -381,6 +517,72 @@ private struct SubtitleCueRow: View {
         if isLocated { return AppTheme.brass }
         if needsReview { return AppTheme.warning.opacity(0.65) }
         return .clear
+    }
+}
+
+/// Per-name confirmation bubble for pinning detected names into memory: each
+/// candidate shows an editable target (empty = keep the source spelling).
+private struct NamePinPopover: View {
+    let candidates: [String]
+    let strings: AppStrings
+    let onConfirm: ([(source: String, target: String)]) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var targets: [String]
+
+    init(candidates: [String], strings: AppStrings, onConfirm: @escaping ([(source: String, target: String)]) -> Void) {
+        self.candidates = candidates
+        self.strings = strings
+        self.onConfirm = onConfirm
+        _targets = State(initialValue: candidates)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(strings.pinNamesTitle)
+                .font(.headline)
+
+            if candidates.isEmpty {
+                Text(strings.pinNamesEmpty)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(candidates.indices, id: \.self) { index in
+                    HStack(spacing: 8) {
+                        Text(candidates[index])
+                            .font(.callout.weight(.medium))
+                            .frame(minWidth: 70, alignment: .leading)
+                        Image(systemName: "arrow.right")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        TextField(strings.pinNameFieldPlaceholder, text: $targets[index])
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 140)
+                    }
+                }
+
+                Text(strings.pinNamesHint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Spacer()
+                Button(strings.cancel) {
+                    dismiss()
+                }
+                if !candidates.isEmpty {
+                    Button(strings.pinNamesConfirm) {
+                        onConfirm(Array(zip(candidates, targets)).map { (source: $0.0, target: $0.1) })
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(16)
+        .frame(minWidth: 300)
     }
 }
 

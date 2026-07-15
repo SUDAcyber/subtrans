@@ -10,11 +10,11 @@ enum AudioExtractorError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noAudioTrack:
-            return "这个文件里没有音轨"
+            return "这个文件里没有音轨 / No audio track in this file"
         case .unsupportedMKV:
-            return "暂不支持 MKV 容器，因为 macOS AVFoundation 无法直接解析。请先用 ffmpeg 转为 MP4，或提取为 M4A/WAV 后再导入。"
+            return "暂不支持 MKV 容器（macOS AVFoundation 无法解析）请先用 ffmpeg 转为 MP4 或提取为 M4A/WAV 再导入 / MKV is not supported by macOS AVFoundation. Convert to MP4 or extract M4A/WAV with ffmpeg first."
         case let .exportFailed(reason):
-            return "音轨提取失败：\(reason)"
+            return "音轨提取失败 / Audio extraction failed: \(reason)"
         }
     }
 }

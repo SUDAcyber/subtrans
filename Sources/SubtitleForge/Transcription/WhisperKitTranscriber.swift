@@ -26,6 +26,7 @@ actor WhisperKitEngine {
         model: String,
         audioPath: String,
         languageHint: String?,
+        vocabularyPrompt: String? = nil,
         onDownloadProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> [TranscribedSegment] {
         idleUnloadTask?.cancel()
@@ -38,10 +39,24 @@ actor WhisperKitEngine {
         options.task = .transcribe
         options.skipSpecialTokens = true
         options.chunkingStrategy = .vad
-        if let languageHint, !languageHint.isEmpty, languageHint != "auto" {
+        if let languageHint {
             options.language = languageHint
         } else {
             options.detectLanguage = true
+        }
+
+        // Feed pinned names from translation memory as an initial prompt so the
+        // decoder is biased toward spelling them correctly. WhisperKit keeps only
+        // the *suffix* of promptTokens when they overflow its prompt budget
+        // (~111 tokens), which would silently drop the earliest-pinned names; cap
+        // to the leading 90 ourselves so the most important names survive.
+        if let vocabularyPrompt, !vocabularyPrompt.isEmpty, let tokenizer = pipeline.tokenizer {
+            let tokens = tokenizer.encode(text: " " + vocabularyPrompt)
+                .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+            if !tokens.isEmpty {
+                options.promptTokens = Array(tokens.prefix(90))
+                options.usePrefillPrompt = true
+            }
         }
 
         let results = try await withTaskCancellationHandler {
@@ -148,6 +163,7 @@ private final class CancellationFlag: @unchecked Sendable {
 
 struct WhisperKitTranscriber: SubtitleTranscriber {
     let model: String
+    var vocabularyPrompt: String?
 
     func transcribe(
         audioURL: URL,
@@ -172,6 +188,7 @@ struct WhisperKitTranscriber: SubtitleTranscriber {
             model: model,
             audioPath: audioURL.path,
             languageHint: languageHint,
+            vocabularyPrompt: vocabularyPrompt,
             onDownloadProgress: { fraction in
                 onProgress(.downloadingModel(fraction: fraction))
             }

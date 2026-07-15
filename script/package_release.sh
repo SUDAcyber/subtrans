@@ -35,6 +35,11 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 rm -rf "$WORK_DIR" "$FINAL_APP" "$ZIP_PATH" "$DMG_PATH" "$CHECKSUM_PATH"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 
+# Apple Silicon only: a universal (arm64 + x86_64) build currently fails because
+# the WhisperKit package declares two executables backed by one ArgmaxCLI target,
+# which SwiftPM rejects when building multiple arches. WhisperKit is also
+# ANE-optimized for Apple Silicon and Typhoon needs a local Python env, so Intel
+# is not a practical target regardless.
 swift build -c release
 BUILD_BINARY="$(swift build -c release --show-bin-path)/$APP_NAME"
 BUILD_BIN_DIR="$(dirname "$BUILD_BINARY")"
@@ -128,7 +133,17 @@ if [[ -f "$BUILTIN_README" ]]; then
   cp "$BUILTIN_README" "$DMG_STAGING/使用说明.md"
 fi
 ln -s /Applications "$DMG_STAGING/Applications"
-hdiutil create -volname "$DISPLAY_NAME $VERSION" -srcfolder "$DMG_STAGING" -ov -format UDZO "$DMG_PATH"
+# hdiutil intermittently fails with "Resource busy" on CI runners; retry a few times.
+dmg_attempt=1
+until hdiutil create -volname "$DISPLAY_NAME $VERSION" -srcfolder "$DMG_STAGING" -ov -format UDZO "$DMG_PATH"; do
+  if (( dmg_attempt >= 3 )); then
+    echo "hdiutil create failed after $dmg_attempt attempts" >&2
+    exit 1
+  fi
+  dmg_attempt=$((dmg_attempt + 1))
+  echo "hdiutil create failed, retrying ($dmg_attempt)…" >&2
+  sleep 5
+done
 
 if [[ "$SIGN_IDENTITY" != "-" ]]; then
   codesign --force --sign "$SIGN_IDENTITY" --timestamp "$DMG_PATH"

@@ -200,7 +200,6 @@ struct AppStrings {
     var importFileFirst: String { choose("请先导入字幕文件", "Import a subtitle file first") }
     var fillAPIKey: String { choose("请先在右侧填写密钥", "Enter an API key in Settings first") }
     var unreadableDroppedFile: String { choose("无法读取拖入的文件", "Could not read the dropped file") }
-    var onlySRTDrop: String { choose("目前只支持拖入 SRT 字幕文件", "Only SRT subtitle files can be dropped") }
     func unsupportedImportType(_ extensionName: String) -> String {
         let type = extensionName.isEmpty ? "未知格式" : ".\(extensionName.lowercased())"
         return choose("不支持导入 \(type) 文件", "Unsupported import type: \(type)")
@@ -254,6 +253,89 @@ struct AppStrings {
 
     var toggleReviewFilter: String {
         choose("筛选疑似人名字幕", "Filter flagged cues")
+    }
+
+    func fastWarnings(_ count: Int) -> String {
+        choose("有 \(count) 条字幕过快 点击查看", "\(count) cues read too fast. Click to view")
+    }
+
+    func showingFastOnly(_ count: Int) -> String {
+        choose("仅显示 \(count) 条过快字幕 点击恢复全部", "Showing \(count) fast cues. Click to show all")
+    }
+
+    var toggleFastFilter: String {
+        choose("筛选阅读速度过快的字幕", "Filter cues that read too fast")
+    }
+
+    var tooFast: String { choose("过快", "Too fast") }
+    var tooFastCount: String { choose("过快字幕", "Too Fast") }
+    var tooFastHelp: String {
+        choose("每秒超过 20 字 观众可能来不及读完 可双击译文精简",
+               "Above 20 characters per second viewers may not finish reading. Double-click to shorten.")
+    }
+    var keepNames: String { choose("人名入库", "Keep Names") }
+    var keepNamesHelp: String {
+        choose("确认这条字幕里检测到的人名译法并加入记忆库", "Review detected names and pin their translations into memory")
+    }
+    var pinNamesTitle: String { choose("确认人名译法", "Confirm Name Translations") }
+    var pinNamesEmpty: String { choose("这条字幕已没有待确认的人名", "No unconfirmed names left in this cue") }
+    var pinNamesHint: String { choose("留空或保持原样 = 保留英文原文", "Leave unchanged or empty to keep the original spelling") }
+    var pinNamesConfirm: String { choose("入库", "Save") }
+    var pinNameFieldPlaceholder: String { choose("译名", "Translation") }
+    var cancel: String { choose("取消", "Cancel") }
+    var keptNameNote: String { choose("人名 保留原文", "Name, keep as-is") }
+    var editTranslation: String { choose("编辑译文", "Edit translation") }
+    var filterEmpty: String { choose("没有符合筛选条件的字幕 点击上方按钮恢复全部", "No cues match this filter. Use the button above to show all.") }
+    var transcriptionCacheHit: String { choose("命中转写缓存 直接复用", "Reusing cached transcription") }
+    var exportLayoutTitle: String { choose("导出格式", "Export Layout") }
+    var readingSpeedLimit: String { choose("阅读速度上限", "Reading Speed") }
+    var cpsUnit: String { choose("字/秒", "cps") }
+    var updateAvailableHelp: String { choose("下载新版本 DMG 到下载文件夹", "Download the new DMG to your Downloads folder") }
+    var downloadingUpdate: String { choose("正在下载更新…", "Downloading update…") }
+
+    func updateDownloadFailed(_ reason: String) -> String {
+        choose("更新下载失败 已为你打开下载页：\(reason)", "Update download failed; opened the release page instead: \(reason)")
+    }
+
+    func updateAvailable(_ version: String) -> String {
+        choose("新版本 v\(version)", "Update v\(version)")
+    }
+
+    func queuedFiles(_ count: Int) -> String {
+        choose("队列中还有 \(count) 个文件", "\(count) files queued")
+    }
+
+    func mediaQueueSection(_ count: Int) -> String {
+        choose("待处理队列 \(count)", "Queue (\(count))")
+    }
+
+    var resumeQueue: String { choose("开始", "Start") }
+    var clearQueue: String { choose("清空", "Clear") }
+    var removeFromQueue: String { choose("从队列移除", "Remove from queue") }
+    var cacheSection: String { choose("磁盘占用", "Disk Usage") }
+    var transcriptionCacheLabel: String { choose("转写缓存", "Transcription cache") }
+    var whisperModelsLabel: String { choose("Whisper 模型", "Whisper models") }
+    var clearCache: String { choose("清理", "Clear") }
+    var cacheHint: String {
+        choose("清理模型后 下次使用 WhisperKit 需要重新下载 转写缓存清理后重新导入同一视频将重新识别",
+               "After clearing models, WhisperKit re-downloads on next use. After clearing the cache, re-imported videos are transcribed again.")
+    }
+
+    func namesKept(_ names: [String]) -> String {
+        choose("已加入记忆库：\(names.joined(separator: " "))", "Added to memory: \(names.joined(separator: ", "))")
+    }
+
+    func exportLayoutName(_ layout: SubtitleExportLayout) -> String {
+        switch layout {
+        case .translationOnly:
+            return choose("纯译文", "Translation only")
+        case .bilingualTranslationFirst:
+            return choose("双语 译文在上", "Bilingual, translation first")
+        case .bilingualSourceFirst:
+            return choose("双语 原文在上", "Bilingual, source first")
+        case .sourceOnly:
+            return choose("纯原文", "Source only")
+        }
     }
 
     func matchCount(_ count: Int) -> String {

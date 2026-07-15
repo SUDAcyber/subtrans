@@ -12,6 +12,12 @@ struct SubtitleDocument: Codable, Identifiable, Hashable {
     var generatedURL: URL?
     var deletedAt: Date?
     var reviewCueIDs: Set<Int>
+    /// Cached whole-file plot summary + glossary so re-runs (补翻) skip the
+    /// extra analysis request. Cleared when translations are cleared.
+    var contextSummary: String?
+    /// Target language the cached summary was written in; a mismatch invalidates
+    /// the cache so a summary+glossary in the wrong language is never reused.
+    var contextSummaryLanguage: String?
 
     init(
         id: UUID = UUID(),
@@ -23,7 +29,9 @@ struct SubtitleDocument: Codable, Identifiable, Hashable {
         cues: [SubtitleCue],
         generatedURL: URL? = nil,
         deletedAt: Date? = nil,
-        reviewCueIDs: Set<Int> = []
+        reviewCueIDs: Set<Int> = [],
+        contextSummary: String? = nil,
+        contextSummaryLanguage: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -35,6 +43,8 @@ struct SubtitleDocument: Codable, Identifiable, Hashable {
         self.generatedURL = generatedURL
         self.deletedAt = deletedAt
         self.reviewCueIDs = reviewCueIDs
+        self.contextSummary = contextSummary
+        self.contextSummaryLanguage = contextSummaryLanguage
     }
 
     var translatedCount: Int {
@@ -82,10 +92,15 @@ struct TranslationProgress: Equatable {
 }
 
 struct ValidationReport: Equatable {
+    /// Default reading-speed ceiling in characters per second. 16 suits CJK
+    /// targets; the user can adjust it in settings (`readingSpeedLimit`).
+    static let cpsThreshold: Double = 16
+
     var totalCues: Int = 0
     var translatedCues: Int = 0
     var missingIDs: [Int] = []
     var duplicateIDs: [Int] = []
+    var fastCueIDs: [Int] = []
 
     var isComplete: Bool {
         totalCues > 0 && missingIDs.isEmpty && duplicateIDs.isEmpty && translatedCues == totalCues
@@ -99,7 +114,7 @@ struct ValidationReport: Equatable {
         return "\(translatedCues)/\(totalCues)"
     }
 
-    static func make(cues: [SubtitleCue]) -> ValidationReport {
+    static func make(cues: [SubtitleCue], threshold: Double = cpsThreshold) -> ValidationReport {
         let grouped = Dictionary(grouping: cues, by: \.sequence)
         let duplicateIDs = grouped
             .filter { $0.value.count > 1 }
@@ -108,11 +123,15 @@ struct ValidationReport: Equatable {
         let missing = cues
             .filter { !$0.hasTranslation }
             .map(\.sequence)
+        let fast = cues
+            .filter { ($0.translationCPS ?? 0) > threshold }
+            .map(\.sequence)
         return ValidationReport(
             totalCues: cues.count,
             translatedCues: cues.filter(\.hasTranslation).count,
             missingIDs: missing,
-            duplicateIDs: duplicateIDs
+            duplicateIDs: duplicateIDs,
+            fastCueIDs: fast
         )
     }
 }

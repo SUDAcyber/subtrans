@@ -7,9 +7,9 @@ enum TyphoonInstallerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingInstaller:
-            return "应用包中缺少 Typhoon 安装脚本"
+            return "应用包中缺少 Typhoon 安装脚本 / The Typhoon installer script is missing from the app bundle"
         case let .failed(message):
-            return "Typhoon 安装失败：\(message)"
+            return "Typhoon 安装失败 / Typhoon install failed: \(message)"
         }
     }
 }

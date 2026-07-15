@@ -59,6 +59,7 @@ struct InspectorView: View {
         case .transcription:
             tabScroll {
                 transcriptionSection
+                cacheSection
             }
         case .memory:
             tabScroll {
@@ -170,6 +171,12 @@ struct InspectorView: View {
 
             Toggle(strings.stripTargetPunctuation, isOn: $store.settings.stripTargetPunctuation)
 
+            Picker(strings.exportLayoutTitle, selection: $store.settings.exportLayout) {
+                ForEach(SubtitleExportLayout.exportChoices) { layout in
+                    Text(strings.exportLayoutName(layout)).tag(layout)
+                }
+            }
+
             Toggle(strings.contextAnalysisToggle, isOn: $store.settings.useContextAnalysis)
 
             Text(strings.contextAnalysisHint)
@@ -185,6 +192,13 @@ struct InspectorView: View {
         )
     }
 
+    private var readingSpeedBinding: Binding<Int> {
+        Binding(
+            get: { Int(store.settings.readingSpeedLimit.rounded()) },
+            set: { store.settings.readingSpeedLimit = Double($0) }
+        )
+    }
+
     private var advancedSection: some View {
         let strings = store.strings
 
@@ -196,6 +210,7 @@ struct InspectorView: View {
                 NumericSettingRow(title: strings.contextOverlap, suffix: strings.cueUnit, value: $store.settings.contextOverlap, range: 0...50, step: 1)
                 NumericSettingRow(title: strings.retryLimit, suffix: strings.retryUnit, value: $store.settings.retryLimit, range: 0...10, step: 1)
                 NumericSettingRow(title: strings.previewLimit, suffix: strings.cueUnit, value: $store.previewCueLimit, range: 50...20_000, step: 100)
+                NumericSettingRow(title: strings.readingSpeedLimit, suffix: strings.cpsUnit, value: readingSpeedBinding, range: 8...40, step: 1)
             }
             .padding(.top, 8)
         } label: {
@@ -282,6 +297,49 @@ struct InspectorView: View {
         }
     }
 
+    private var cacheSection: some View {
+        let strings = store.strings
+
+        return SettingsGroup(title: strings.cacheSection) {
+            HStack {
+                Text(strings.transcriptionCacheLabel)
+                    .foregroundStyle(AppTheme.ivory)
+                Spacer()
+                Text(DiskUsage.format(store.transcriptionCacheBytes))
+                    .foregroundStyle(AppTheme.mutedIvory)
+                    .font(.caption.monospacedDigit())
+                Button(strings.clearCache) {
+                    store.clearTranscriptionCache()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(store.transcriptionCacheBytes == 0)
+            }
+
+            HStack {
+                Text(strings.whisperModelsLabel)
+                    .foregroundStyle(AppTheme.ivory)
+                Spacer()
+                Text(DiskUsage.format(store.whisperModelBytes))
+                    .foregroundStyle(AppTheme.mutedIvory)
+                    .font(.caption.monospacedDigit())
+                Button(strings.clearCache) {
+                    store.clearWhisperModels()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(store.whisperModelBytes == 0 || store.isTranscribing)
+            }
+
+            Text(strings.cacheHint)
+                .font(.caption)
+                .foregroundStyle(AppTheme.mutedIvory)
+        }
+        .onAppear {
+            store.refreshCacheSizes()
+        }
+    }
+
     private var memorySection: some View {
         let strings = store.strings
 
@@ -357,6 +415,7 @@ struct InspectorView: View {
             LabeledContent(strings.translated, value: "\(store.validation.translatedCues)")
             LabeledContent(strings.missing, value: "\(store.validation.missingIDs.count)")
             LabeledContent(strings.duplicates, value: "\(store.validation.duplicateIDs.count)")
+            LabeledContent(strings.tooFastCount, value: "\(store.validation.fastCueIDs.count)")
 
             Button(role: .destructive) {
                 store.clearTranslations()

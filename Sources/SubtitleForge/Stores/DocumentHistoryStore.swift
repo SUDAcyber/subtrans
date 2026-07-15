@@ -2,8 +2,11 @@ import Foundation
 
 enum DocumentHistoryStore {
     private static let fileName = "document-history.json"
-    private static let appFolderName = "SUDA字幕翻译助手"
+    private static let appFolderName = AppPaths.supportFolderName
     private static let legacyAppFolderName = "字幕锻造"
+    /// Serializes writes so a debounced background save and the synchronous
+    /// terminate-time save can never interleave; the last submitted write wins.
+    private static let saveQueue = DispatchQueue(label: "com.subtitleforge.history-save")
 
     static func load() -> [SubtitleDocument] {
         guard let url = readableHistoryURL(),
@@ -16,7 +19,18 @@ enum DocumentHistoryStore {
         return documents
     }
 
+    /// Background debounced save: enqueue and return.
     static func save(_ documents: [SubtitleDocument]) {
+        saveQueue.async { write(documents) }
+    }
+
+    /// Blocks until the write (and any queued writes ahead of it) complete. Used
+    /// at app termination so the final state is guaranteed on disk.
+    static func saveSynchronously(_ documents: [SubtitleDocument]) {
+        saveQueue.sync { write(documents) }
+    }
+
+    private static func write(_ documents: [SubtitleDocument]) {
         guard let url = historyURL(folderName: appFolderName) else { return }
         do {
             try FileManager.default.createDirectory(

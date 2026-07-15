@@ -10,13 +10,13 @@ enum TyphoonTranscriberError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notInstalled:
-            return "Typhoon ASR 尚未安装 请先在终端运行应用目录下的 install_typhoon.sh 或联系开发者"
+            return "Typhoon ASR 尚未安装 请在识别设置中一键安装 / Typhoon ASR is not installed. Use the installer in Transcribe settings."
         case let .conversionFailed(reason):
-            return "音频转换失败：\(reason)"
+            return "音频转换失败 / Audio conversion failed: \(reason)"
         case let .bridgeFailed(reason):
-            return "Typhoon 识别失败：\(reason)"
+            return "Typhoon 识别失败 / Typhoon transcription failed: \(reason)"
         case .emptyResult:
-            return "Typhoon 没有识别到任何语音"
+            return "Typhoon 没有识别到任何语音 / Typhoon recognized no speech"
         }
     }
 }
@@ -28,7 +28,7 @@ enum TyphoonTranscriberError: LocalizedError {
 struct TyphoonTranscriber: SubtitleTranscriber {
     static var venvPython: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("SUDA字幕翻译助手/typhoon/venv/bin/python3")
+            .appendingPathComponent("\(AppPaths.supportFolderName)/typhoon/venv/bin/python3")
     }
 
     static var isInstalled: Bool {

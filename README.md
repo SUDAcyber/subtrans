@@ -16,6 +16,7 @@
 
 | 项目 | 要求或注意事项 |
 | --- | --- |
+| 芯片 | **仅支持 Apple Silicon（M 系列）**。发布版为 arm64 架构，Intel Mac 无法运行（WhisperKit 依赖 Apple 神经引擎，上游依赖暂不支持多架构构建） |
 | macOS | macOS 14.0 或更高版本 |
 | 网络 | 首次安装 Typhoon、首次使用 WhisperKit、云端识别及 AI 翻译都需要网络 |
 | Typhoon 空间 | 首次安装约需 2GB，依赖与 Python 环境保存在用户目录 |

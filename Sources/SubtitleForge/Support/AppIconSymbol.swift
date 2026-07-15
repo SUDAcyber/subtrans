@@ -30,4 +30,7 @@ enum AppIconSymbol {
     static let clear = "trash.slash"
     static let remove = "minus.circle.fill"
     static let transcribe = "waveform"
+    static let readingSpeed = "gauge.with.needle"
+    static let update = "arrow.down.circle"
+    static let edit = "pencil"
 }

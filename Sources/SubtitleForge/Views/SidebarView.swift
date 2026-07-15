@@ -34,6 +34,38 @@ struct SidebarView: View {
             .padding(.vertical, 12)
 
             List(selection: $store.selectedDocumentID) {
+                if !store.mediaQueue.isEmpty {
+                    Section {
+                        ForEach(Array(store.mediaQueue.enumerated()), id: \.offset) { index, url in
+                            QueuedMediaRow(
+                                position: index + 1,
+                                url: url,
+                                strings: strings,
+                                onRemove: { store.removeQueuedMedia(at: index) }
+                            )
+                        }
+                    } header: {
+                        HStack {
+                            Text(strings.mediaQueueSection(store.mediaQueue.count))
+                            Spacer()
+                            if !store.isBusy {
+                                Button(strings.resumeQueue) {
+                                    store.resumeMediaQueue()
+                                }
+                                .buttonStyle(.borderless)
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.brass)
+                            }
+                            Button(strings.clearQueue) {
+                                store.clearMediaQueue()
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.mutedIvory)
+                        }
+                    }
+                }
+
                 Section(strings.history) {
                     ForEach(store.activeDocuments) { document in
                         DocumentRow(document: document, strings: strings)
@@ -72,6 +104,43 @@ struct SidebarView: View {
             }
             .padding(14)
         }
+    }
+}
+
+private struct QueuedMediaRow: View {
+    let position: Int
+    let url: URL
+    let strings: AppStrings
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Text("\(position)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(AppTheme.mutedIvory)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(url.deletingPathExtension().lastPathComponent)
+                    .font(.callout)
+                    .lineLimit(1)
+                Text(url.pathExtension.uppercased())
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                onRemove()
+            } label: {
+                Image(systemName: AppIconSymbol.remove)
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(AppTheme.mutedIvory)
+            .help(strings.removeFromQueue)
+        }
+        .padding(.vertical, 2)
     }
 }
 

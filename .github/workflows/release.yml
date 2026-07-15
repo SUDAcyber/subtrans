@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-release-${{ runner.os }}-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          restore-keys: spm-release-${{ runner.os }}-
+      - name: Test
+        run: swift test
+      - name: Package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ./script/package_release.sh "$VERSION"
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: |
+            dist/release/*.dmg
+            dist/release/*.zip
+            dist/release/*checksums*.txt
+          if-no-files-found: error
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist/release
+          # Re-tagging an existing release would 422 on create; replace it.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release delete "$GITHUB_REF_NAME" --yes --cleanup-tag=false
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --title "SUDA字幕翻译助手 $GITHUB_REF_NAME" \
+            --generate-notes \
+            *.dmg *.zip *checksums*.txt

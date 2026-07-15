@@ -40,6 +40,20 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                if let version = store.availableUpdateVersion {
+                    Button {
+                        store.downloadUpdate()
+                    } label: {
+                        if store.isDownloadingUpdate {
+                            Label(strings.downloadingUpdate, systemImage: AppIconSymbol.update)
+                        } else {
+                            Label(strings.updateAvailable(version), systemImage: AppIconSymbol.update)
+                        }
+                    }
+                    .disabled(store.isDownloadingUpdate)
+                    .help(strings.updateAvailableHelp)
+                }
+
                 Button {
                     store.importWithPanel()
                 } label: {

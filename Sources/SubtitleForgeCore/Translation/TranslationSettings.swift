@@ -105,6 +105,8 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
     public var retryLimit: Int
     public var requestTimeoutSeconds: Double
     public var stripTargetPunctuation: Bool
+    public var exportLayout: SubtitleExportLayout
+    public var readingSpeedLimit: Double
     public var maxConcurrentRequests: Int
     public var useContextAnalysis: Bool
     public var transcriptionEngine: TranscriptionEngine
@@ -128,6 +130,8 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         retryLimit: Int = 2,
         requestTimeoutSeconds: Double = 120,
         stripTargetPunctuation: Bool = true,
+        exportLayout: SubtitleExportLayout = .translationOnly,
+        readingSpeedLimit: Double = 16,
         maxConcurrentRequests: Int = 5,
         useContextAnalysis: Bool = true,
         transcriptionEngine: TranscriptionEngine = .whisperKit,
@@ -150,6 +154,8 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         self.retryLimit = retryLimit
         self.requestTimeoutSeconds = requestTimeoutSeconds
         self.stripTargetPunctuation = stripTargetPunctuation
+        self.exportLayout = exportLayout
+        self.readingSpeedLimit = readingSpeedLimit
         self.maxConcurrentRequests = maxConcurrentRequests
         self.useContextAnalysis = useContextAnalysis
         self.transcriptionEngine = transcriptionEngine
@@ -174,6 +180,8 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         case retryLimit
         case requestTimeoutSeconds
         case stripTargetPunctuation
+        case exportLayout
+        case readingSpeedLimit
         case maxConcurrentRequests
         case useContextAnalysis
         case transcriptionEngine
@@ -200,6 +208,8 @@ public struct TranslationSettings: Codable, Equatable, Sendable {
         self.retryLimit = try container.decodeIfPresent(Int.self, forKey: .retryLimit) ?? 2
         self.requestTimeoutSeconds = try container.decodeIfPresent(Double.self, forKey: .requestTimeoutSeconds) ?? 120
         self.stripTargetPunctuation = try container.decodeIfPresent(Bool.self, forKey: .stripTargetPunctuation) ?? true
+        self.exportLayout = try container.decodeIfPresent(SubtitleExportLayout.self, forKey: .exportLayout) ?? .translationOnly
+        self.readingSpeedLimit = try container.decodeIfPresent(Double.self, forKey: .readingSpeedLimit) ?? 16
         self.maxConcurrentRequests = try container.decodeIfPresent(Int.self, forKey: .maxConcurrentRequests) ?? 5
         self.useContextAnalysis = try container.decodeIfPresent(Bool.self, forKey: .useContextAnalysis) ?? true
         self.transcriptionEngine = try container.decodeIfPresent(TranscriptionEngine.self, forKey: .transcriptionEngine) ?? .whisperKit
