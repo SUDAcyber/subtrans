@@ -1,6 +1,9 @@
 import Foundation
 import SubtitleForgeCore
-import WhisperKit
+// WhisperKit is not yet annotated for Swift 6 strict concurrency; @preconcurrency
+// downgrades its non-Sendable send diagnostics (e.g. the WhisperKit initializer
+// result crossing the actor boundary) to warnings so stricter toolchains build.
+@preconcurrency import WhisperKit
 
 /// Local on-device transcription via WhisperKit (CoreML on the Apple Neural Engine).
 /// The pipeline is non-Sendable, so all use of it stays inside this actor; the
